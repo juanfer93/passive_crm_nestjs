@@ -63,6 +63,18 @@ pnpm build
 
 If pnpm is unavailable in the local shell but dependencies already exist, `npm.cmd test`, `npm.cmd run lint`, and `npm.cmd run build` are acceptable for local verification on Windows.
 
+## Commit Style
+
+Use Conventional Commits for all future commits. Prefer clear, scoped messages such as:
+
+- `feat: add lead scoring extraction`
+- `fix: handle instagram media payloads`
+- `test: cover meta webhook processing`
+- `docs: update deployment notes`
+- `refactor: simplify ghl sync adapter`
+
+Keep each commit focused on one logical change.
+
 ## Notes
 
 - Do not treat native GHL workflows as business logic. NestJS owns the business logic.
