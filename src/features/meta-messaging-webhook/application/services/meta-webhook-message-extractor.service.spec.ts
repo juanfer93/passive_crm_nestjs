@@ -75,6 +75,46 @@ describe('MetaWebhookMessageExtractor', () => {
     ]);
   });
 
+  it('extracts unsupported Messenger attachments as unknown media', () => {
+    const payload: MetaWebhookPayload = {
+      object: 'page',
+      entry: [
+        {
+          id: 'page-1',
+          messaging: [
+            {
+              sender: { id: 'sender-1' },
+              recipient: { id: 'page-1' },
+              timestamp: 1710000002000,
+              message: {
+                mid: 'mid-file-1',
+                attachments: [
+                  {
+                    type: 'file',
+                    payload: { url: 'https://cdn.example/file.pdf' },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(extractor.extract(payload)).toEqual([
+      {
+        messageId: 'mid-file-1',
+        channel: 'messenger',
+        contactId: 'sender-1',
+        pageId: 'page-1',
+        kind: 'unknown',
+        text: undefined,
+        mediaReference: 'https://cdn.example/file.pdf',
+        occurredAt: new Date(1710000002000),
+      },
+    ]);
+  });
+
   it('ignores unsupported Meta objects and events without sender/message', () => {
     expect(extractor.extract({ object: 'whatsapp_business_account', entry: [] })).toEqual([]);
 
