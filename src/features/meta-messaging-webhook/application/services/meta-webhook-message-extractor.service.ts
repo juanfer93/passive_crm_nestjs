@@ -72,6 +72,7 @@ export class MetaWebhookMessageExtractor {
       messageId,
       channel,
       contactId: senderId,
+      pageId: event.recipient?.id,
       kind: event.message.text ? 'text' : kind,
       text: event.message.text,
       mediaReference: attachment?.payload?.url,

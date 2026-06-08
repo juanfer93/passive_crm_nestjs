@@ -7,13 +7,20 @@ export function normalizeLeadCustomFields(content?: string | null): LeadCustomFi
 
   try {
     const parsed = JSON.parse(content) as Record<string, unknown>;
+    const purchaseTimeline = stringOrUndefined(parsed.purchase_timeline);
+    const vehicleInterest = stringOrUndefined(parsed.vehicle_interest);
 
     return {
-      purchase_timeline: stringOrUndefined(parsed.purchase_timeline),
-      vehicle_type: stringOrUndefined(parsed.vehicle_type),
+      vehicle_interest: vehicleInterest,
+      purchase_timeline: purchaseTimeline,
+      lead_temperature: normalizeLeadTemperature(parsed.lead_temperature, purchaseTimeline),
+      vehicle_type: normalizeVehicleType(parsed.vehicle_type, vehicleInterest),
       down_payment: stringOrUndefined(parsed.down_payment),
-      document_status: booleanOrStringOrUndefined(parsed.document_status),
+      document_status: normalizeDocumentStatus(parsed.document_status),
       phone: normalizePhone(parsed.phone),
+      email: normalizeEmail(parsed.email),
+      language: normalizeLanguage(parsed.language),
+      credit_profile: stringOrUndefined(parsed.credit_profile),
     };
   } catch {
     return {};
@@ -36,6 +43,229 @@ export function normalizePhone(value: unknown): string | undefined {
   return digits.length >= 8 ? digits : undefined;
 }
 
+function normalizeLeadTemperature(
+  value: unknown,
+  purchaseTimeline?: string,
+): string | undefined {
+  const derived = deriveLeadTemperature(purchaseTimeline);
+
+  if (derived) {
+    return derived;
+  }
+
+  const normalized = normalizeText(value);
+
+  if (!normalized) {
+    return undefined;
+  }
+
+  if (normalized.includes('hot')) {
+    return 'hot';
+  }
+
+  if (normalized.includes('warm')) {
+    return 'warm';
+  }
+
+  if (normalized.includes('cold')) {
+    return 'cold';
+  }
+
+  return undefined;
+}
+
+function deriveLeadTemperature(purchaseTimeline?: string): string | undefined {
+  const normalized = normalizeText(purchaseTimeline);
+
+  if (!normalized) {
+    return undefined;
+  }
+
+  if (
+    [
+      'hoy',
+      'today',
+      'esta semana',
+      'this week',
+      'this_week',
+      'lo mas pronto',
+      'lo antes posible',
+      'as soon as possible',
+      'asap',
+      'pronto',
+      'soon',
+      'inmediatamente',
+      'immediate',
+    ].some((phrase) => normalized.includes(phrase))
+  ) {
+    return 'hot';
+  }
+
+  if (['este mes', 'this month', 'this_month'].some((phrase) => normalized.includes(phrase))) {
+    return 'warm';
+  }
+
+  if (
+    [
+      'solo mirando',
+      'just looking',
+      'looking around',
+      'mirando',
+      'not ready',
+      'no estoy listo',
+    ].some((phrase) => normalized.includes(phrase))
+  ) {
+    return 'cold';
+  }
+
+  return undefined;
+}
+
+function normalizeVehicleType(value: unknown, vehicleInterest?: string): string | undefined {
+  const normalized = normalizeText([stringOrUndefined(value), vehicleInterest].filter(Boolean).join(' '));
+
+  if (!normalized) {
+    return undefined;
+  }
+
+  if (
+    [
+      'troca',
+      'truck',
+      'pickup',
+      'pick up',
+      'tacoma',
+      'tundra',
+      'f150',
+      'f 150',
+      'silverado',
+      'sierra',
+      'ram',
+      'colorado',
+      'ranger',
+      'frontier',
+      'ridgeline',
+    ].some((phrase) => normalized.includes(phrase))
+  ) {
+    return 'Troca';
+  }
+
+  if (
+    [
+      'suv',
+      'rav4',
+      'rav 4',
+      'highlander',
+      '4runner',
+      'crv',
+      'cr v',
+      'pilot',
+      'explorer',
+      'expedition',
+      'escape',
+      'edge',
+      'tahoe',
+      'suburban',
+      'traverse',
+      'equinox',
+      'acadia',
+      'pathfinder',
+      'rogue',
+      'murano',
+      'cherokee',
+      'wrangler',
+      'durango',
+      'palisade',
+      'santa fe',
+      'tucson',
+      'telluride',
+      'sportage',
+      'sorento',
+      'forester',
+      'outback',
+      'crosstrek',
+      'cx5',
+      'cx 5',
+      'cx9',
+      'cx 9',
+      'bronco',
+    ].some((phrase) => normalized.includes(phrase))
+  ) {
+    return 'SUV';
+  }
+
+  if (
+    [
+      'sedan',
+      'sedan',
+      'corolla',
+      'camry',
+      'civic',
+      'accord',
+      'altima',
+      'sentra',
+      'maxima',
+      'elantra',
+      'sonata',
+      'forte',
+      'optima',
+      'malibu',
+      'impala',
+      'charger',
+      'versa',
+      'avalon',
+      'jetta',
+      'passat',
+      'mazda3',
+      'mazda 3',
+      'mazda6',
+      'mazda 6',
+      'prius',
+      'accent',
+    ].some((phrase) => normalized.includes(phrase))
+  ) {
+    return 'Sedan';
+  }
+
+  return stringOrUndefined(value);
+}
+
+function normalizeEmail(value: unknown): string | undefined {
+  const raw = stringOrUndefined(value)?.toLowerCase();
+
+  if (!raw) {
+    return undefined;
+  }
+
+  const match = raw.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/);
+  return match?.[0];
+}
+
+function normalizeLanguage(value: unknown): string | undefined {
+  const normalized = normalizeText(value);
+
+  if (!normalized) {
+    return undefined;
+  }
+
+  if (['spanish', 'espanol', 'es'].some((phrase) => normalized.includes(phrase))) {
+    return 'es';
+  }
+
+  if (['english', 'ingles', 'en'].some((phrase) => normalized.includes(phrase))) {
+    return 'en';
+  }
+
+  return undefined;
+}
+
+function normalizeText(value: unknown): string | undefined {
+  return stringOrUndefined(value)
+    ?.normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
 function stringOrUndefined(value: unknown): string | undefined {
   if (typeof value !== 'string') {
     return undefined;
@@ -45,9 +275,9 @@ function stringOrUndefined(value: unknown): string | undefined {
   return trimmed && trimmed.toLowerCase() !== 'null' ? trimmed : undefined;
 }
 
-function booleanOrStringOrUndefined(value: unknown): boolean | string | undefined {
+function normalizeDocumentStatus(value: unknown): string | undefined {
   if (typeof value === 'boolean') {
-    return value;
+    return value ? 'confirmed' : 'not_confirmed';
   }
 
   return stringOrUndefined(value);

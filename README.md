@@ -30,15 +30,21 @@ OpenAI extrae este JSON desde el historial de chat:
 
 ```json
 {
+  "vehicle_interest": "Toyota Tacoma 2022",
   "purchase_timeline": "esta semana | este mes | solo estoy mirando | el otro mes",
-  "vehicle_type": "string",
+  "lead_temperature": "hot | warm | cold",
+  "vehicle_type": "Sedan | SUV | Troca",
   "down_payment": "string",
-  "document_status": true,
-  "phone": "3055555555"
+  "document_status": "confirmed",
+  "phone": "3055555555",
+  "email": "cliente@example.com",
+  "language": "es | en",
+  "credit_profile": "string"
 }
 ```
 
 `phone` se normaliza como digitos sin `+`. Si viene con indicativo `1` y tiene 11 digitos, se guarda como numero nacional de 10 digitos. Para otros paises se conserva el indicativo sin el signo `+`.
+`credit_profile` y `email` son opcionales y solo se guardan si el cliente los menciona. `lead_temperature` se deriva del timeline: hoy/esta semana/lo antes posible es `hot`, este mes es `warm`, y solo mirando es `cold`.
 
 ## Estructura
 
@@ -77,6 +83,44 @@ No pegues claves reales en el chat ni las guardes en archivos versionados. La co
 pnpm install
 pnpm start:dev
 ```
+
+## Simular chat en terminal
+
+El simulador usa MongoDB para guardar historial/custom fields y OpenAI para responder, pero no llama a Meta ni a GHL.
+
+```bash
+pnpm simulate:chat -- --profile offlease-fredericksburg --contact test-lead-1
+```
+
+Perfiles disponibles:
+
+- `offlease-fredericksburg`
+- `offlease-motors-fredericksburg`
+- `offlease-stafford`
+
+## Simular media local
+
+El simulador de media lee un archivo local, usa OpenAI para describir imagenes o transcribir audio, y luego pasa ese texto al mismo flujo de conversacion. Los archivos sin texto util para calificacion, incluidos videos/documentos/stickers u otros tipos no soportados, se tratan como `unknown` y el bot continua con la siguiente pregunta pendiente.
+
+```bash
+pnpm simulate:media -- --profile offlease-fredericksburg --contact media-image-1 --file C:\dev\imagen_de_prueba.jpg
+pnpm simulate:media -- --profile offlease-fredericksburg --contact media-audio-1 --file C:\dev\audio_de_prueba.ogg
+```
+
+Tambien puedes indicar el tipo explicitamente:
+
+```bash
+pnpm simulate:media -- --type image --file C:\dev\imagen_de_prueba.jpg
+pnpm simulate:media -- --type audio --file C:\dev\audio_de_prueba.ogg
+```
+
+Para revisar solo la transcripcion de OpenAI sin ejecutar el flujo del bot:
+
+```bash
+pnpm simulate:media -- --profile offlease-fredericksburg --contact media-audio-transcribe-only --file C:\dev\audio_de_prueba.ogg --transcribe-only
+```
+
+El output muestra `OpenAI audio transcription>` para audio, `Image analysis>` para imagenes y `Media notice>` para archivos no analizables.
 
 Webhook de Meta Messenger/Instagram:
 

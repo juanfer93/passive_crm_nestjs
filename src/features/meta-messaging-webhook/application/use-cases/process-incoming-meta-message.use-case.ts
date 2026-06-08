@@ -1,6 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { DealerProfileResolver } from '@/features/meta-messaging-webhook/application/services/dealer-profile-resolver.service';
+import { MetaWebhookMessageExtractor } from '@/features/meta-messaging-webhook/application/services/meta-webhook-message-extractor.service';
 import { ConversationMessage } from '@/features/meta-messaging-webhook/domain/entities/conversation-message.entity';
 import { IncomingMetaMessage } from '@/features/meta-messaging-webhook/domain/entities/incoming-meta-message.entity';
+import { LeadCustomFields } from '@/features/meta-messaging-webhook/domain/entities/lead-custom-fields.entity';
+import { buildCompletedLeadCourtesyReply } from '@/features/meta-messaging-webhook/domain/services/completed-lead-courtesy-reply.service';
+import { shouldReactivateLeadQualification } from '@/features/meta-messaging-webhook/domain/services/lead-qualification-reactivation.service';
 import {
   ASSISTANT_REPLY_GENERATOR,
   AssistantReplyGeneratorPort,
@@ -32,12 +37,12 @@ import {
   MetaMessengerPort,
 } from '@/features/meta-messaging-webhook/domain/ports/meta-messenger.port';
 import { MetaWebhookPayload } from '@/features/meta-messaging-webhook/domain/types/meta-webhook-payload.type';
-import { MetaWebhookMessageExtractor } from '@/features/meta-messaging-webhook/application/services/meta-webhook-message-extractor.service';
 
 @Injectable()
 export class ProcessIncomingMetaMessageUseCase {
   constructor(
     private readonly extractor: MetaWebhookMessageExtractor,
+    private readonly dealerProfiles: DealerProfileResolver,
     @Inject(MESSAGE_IDEMPOTENCY_STORE)
     private readonly idempotencyStore: MessageIdempotencyStore,
     @Inject(CONVERSATION_STATE_REPOSITORY)
@@ -84,19 +89,65 @@ export class ProcessIncomingMetaMessageUseCase {
       occurredAt: message.occurredAt,
     };
 
+    const dealerProfile = this.dealerProfiles.resolve({ pageId: message.pageId });
+    const currentState = await this.conversationState.getState(message.channel, message.contactId);
+    const shouldReactivate = shouldReactivateLeadQualification(currentState, new Date());
+    const hasPriorConversation = !shouldReactivate && Boolean(currentState?.messages.length);
+
+    if (shouldReactivate) {
+      await this.conversationState.reactivateLeadQualification(message.channel, message.contactId);
+    }
+
     await this.conversationState.appendMessage(inboundMessage);
 
-    const recentMessages = await this.conversationState.getRecentMessages(
-      message.channel,
-      message.contactId,
-      12,
-    );
-    const reply = await this.assistant.generateReply({
+    if (currentState?.qualificationStatus === 'completed' && !shouldReactivate) {
+      const reply = buildCompletedLeadCourtesyReply(inboundText);
+
+      if (!reply) {
+        return;
+      }
+
+      await this.messenger.sendTextMessage(message.channel, message.contactId, reply);
+      await this.conversationState.appendMessage({
+        id: `${message.messageId}:outbound`,
+        channel: message.channel,
+        contactId: message.contactId,
+        direction: 'outbound',
+        kind: 'text',
+        text: reply,
+        occurredAt: new Date(),
+      });
+
+      return;
+    }
+
+    const recentMessages = shouldReactivate
+      ? [inboundMessage]
+      : await this.conversationState.getRecentMessages(message.channel, message.contactId, 12);
+    const extractedFields = await this.leadFieldsExtractor.extractLeadCustomFields({
       channel: message.channel,
       contactId: message.contactId,
-      userMessage: inboundText,
       recentMessages,
+      knownFields: shouldReactivate ? {} : currentState?.leadCustomFields ?? {},
+      dealerProfile,
     });
+    const leadQualification = await this.conversationState.mergeLeadCustomFields(
+      message.channel,
+      message.contactId,
+      extractedFields,
+    );
+    const reply =
+      leadQualification.status === 'completed'
+        ? 'Perfecto ✅ Ya tengo la información. Un especialista se comunicará pronto.'
+        : await this.assistant.generateReply({
+            channel: message.channel,
+            contactId: message.contactId,
+            userMessage: inboundText,
+            recentMessages,
+            hasPriorConversation,
+            leadCustomFields: leadQualification.customFields,
+            dealerProfile,
+          });
 
     await this.messenger.sendTextMessage(message.channel, message.contactId, reply);
 
@@ -111,7 +162,7 @@ export class ProcessIncomingMetaMessageUseCase {
     };
 
     await this.conversationState.appendMessage(outboundMessage);
-    this.syncToPassiveCrm(message, inboundMessage, outboundMessage);
+    this.syncToPassiveCrm(message, leadQualification.customFields, inboundMessage, outboundMessage);
   }
 
   private async resolveMessageText(message: IncomingMetaMessage): Promise<string> {
@@ -119,8 +170,12 @@ export class ProcessIncomingMetaMessageUseCase {
       return message.text ?? '';
     }
 
+    if (message.kind === 'unknown') {
+      return this.unsupportedMediaMessage();
+    }
+
     if (!message.mediaReference) {
-      return message.text ?? 'Incoming Meta media message without media reference.';
+      return message.text ?? this.unsupportedMediaMessage();
     }
 
     const media = await this.mediaReader.getMediaContent(message.mediaReference);
@@ -134,24 +189,19 @@ export class ProcessIncomingMetaMessageUseCase {
       return [message.text, imageDescription].filter(Boolean).join('\n');
     }
 
-    return message.text ?? 'Unsupported incoming Meta message.';
+    return message.text ?? this.unsupportedMediaMessage();
+  }
+
+  private unsupportedMediaMessage(): string {
+    return 'El cliente envio un archivo sin texto util para la calificacion. Continua con la siguiente pregunta pendiente.';
   }
 
   private syncToPassiveCrm(
     source: IncomingMetaMessage,
+    leadFields: LeadCustomFields,
     ...messages: ConversationMessage[]
   ): void {
     this.background.run('sync-ghl-passive-crm', async () => {
-      const recentMessages = await this.conversationState.getRecentMessages(
-        source.channel,
-        source.contactId,
-        20,
-      );
-      const leadFields = await this.leadFieldsExtractor.extractLeadCustomFields({
-        channel: source.channel,
-        contactId: source.contactId,
-        recentMessages,
-      });
       const contactPhone = leadFields.phone;
 
       if (!contactPhone) {

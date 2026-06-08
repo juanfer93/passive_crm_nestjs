@@ -1,9 +1,13 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument } from 'mongoose';
+import { HydratedDocument, SchemaTypes } from 'mongoose';
 import {
   ConversationMessage,
   MetaMessagingChannel,
 } from '@/features/meta-messaging-webhook/domain/entities/conversation-message.entity';
+import {
+  LeadCustomFields,
+  LeadQualificationStatus,
+} from '@/features/meta-messaging-webhook/domain/entities/lead-custom-fields.entity';
 
 export type ConversationDocument = HydratedDocument<Conversation>;
 
@@ -48,6 +52,15 @@ export class Conversation {
 
   @Prop({ type: [StoredConversationMessageSchema], default: [] })
   messages: StoredConversationMessage[];
+
+  @Prop({ type: SchemaTypes.Mixed, default: {} })
+  leadCustomFields: LeadCustomFields;
+
+  @Prop({ required: true, enum: ['active', 'completed'], default: 'active' })
+  qualificationStatus: LeadQualificationStatus;
+
+  @Prop()
+  qualificationCompletedAt?: Date;
 
   @Prop({ required: true })
   createdAt: Date;

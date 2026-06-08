@@ -17,7 +17,7 @@ describe('GhlPassiveCrmAdapter', () => {
       purchase_timeline: 'este mes',
       vehicle_type: undefined,
       down_payment: '',
-      document_status: false,
+      document_status: 'not_confirmed',
       phone: '3055550101',
     });
 
@@ -26,7 +26,7 @@ describe('GhlPassiveCrmAdapter', () => {
       {
         customFields: [
           { key: 'purchase_timeline', value: 'este mes' },
-          { key: 'document_status', value: false },
+          { key: 'document_status', value: 'not_confirmed' },
           { key: 'phone', value: '3055550101' },
         ],
       },

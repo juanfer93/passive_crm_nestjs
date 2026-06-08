@@ -6,6 +6,8 @@
     "build": "nest build && node scripts/resolve-path-aliases.js",
     "start": "nest start",
     "start:dev": "nest start --watch",
+    "simulate:chat": "node scripts/run-simulate-chat.js",
+    "simulate:media": "node scripts/run-simulate-media.js",
     "lint": "eslint \"src/**/*.ts\"",
     "test": "jest"
   },

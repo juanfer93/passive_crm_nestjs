@@ -7,6 +7,7 @@ export interface IncomingMetaMessage {
   messageId: string;
   channel: MetaMessagingChannel;
   contactId: string;
+  pageId?: string;
   kind: ConversationMessageKind;
   text?: string;
   mediaReference?: string;

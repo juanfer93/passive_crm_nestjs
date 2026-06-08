@@ -3,7 +3,9 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AcceptMetaWebhookUseCase } from '@/features/meta-messaging-webhook/application/use-cases/accept-meta-webhook.use-case';
 import { ProcessIncomingMetaMessageUseCase } from '@/features/meta-messaging-webhook/application/use-cases/process-incoming-meta-message.use-case';
+import { SimulateTerminalConversationUseCase } from '@/features/meta-messaging-webhook/application/use-cases/simulate-terminal-conversation.use-case';
 import { VerifyMetaWebhookUseCase } from '@/features/meta-messaging-webhook/application/use-cases/verify-meta-webhook.use-case';
+import { DealerProfileResolver } from '@/features/meta-messaging-webhook/application/services/dealer-profile-resolver.service';
 import { MetaWebhookMessageExtractor } from '@/features/meta-messaging-webhook/application/services/meta-webhook-message-extractor.service';
 import { ASSISTANT_REPLY_GENERATOR } from '@/features/meta-messaging-webhook/domain/ports/assistant-reply-generator.port';
 import { BACKGROUND_TASK_RUNNER } from '@/features/meta-messaging-webhook/domain/ports/background-task-runner.port';
@@ -43,7 +45,9 @@ import { MetaSignatureGuard } from '@/features/meta-messaging-webhook/presentati
   providers: [
     AcceptMetaWebhookUseCase,
     ProcessIncomingMetaMessageUseCase,
+    SimulateTerminalConversationUseCase,
     VerifyMetaWebhookUseCase,
+    DealerProfileResolver,
     MetaWebhookMessageExtractor,
     MetaSignatureGuard,
     MetaMessagingAdapter,
