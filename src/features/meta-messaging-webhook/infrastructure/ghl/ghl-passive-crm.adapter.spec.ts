@@ -3,6 +3,24 @@ import { ConfigService } from '@nestjs/config';
 import { GhlPassiveCrmAdapter } from '@/features/meta-messaging-webhook/infrastructure/ghl/ghl-passive-crm.adapter';
 
 describe('GhlPassiveCrmAdapter', () => {
+  it('skips writes when GHL sync is not explicitly enabled', async () => {
+    const axiosRef = {
+      get: jest.fn(),
+      put: jest.fn(),
+    };
+    const adapter = new GhlPassiveCrmAdapter(
+      { axiosRef } as unknown as HttpService,
+      configService({ GHL_SYNC_ENABLED: 'false' }),
+    );
+
+    await adapter.updateCustomFields('3055550101', {
+      phone: '3055550101',
+    });
+
+    expect(axiosRef.get).not.toHaveBeenCalled();
+    expect(axiosRef.put).not.toHaveBeenCalled();
+  });
+
   it('sends only known custom fields with values', async () => {
     const axiosRef = {
       get: jest.fn().mockResolvedValue({ data: { contacts: [{ id: 'contact-1' }] } }),
@@ -41,12 +59,14 @@ describe('GhlPassiveCrmAdapter', () => {
   });
 });
 
-function configService(): ConfigService {
+function configService(overrides: Record<string, string> = {}): ConfigService {
   const values: Record<string, string> = {
+    GHL_SYNC_ENABLED: 'true',
     GHL_ACCESS_TOKEN: 'ghl-token',
     GHL_API_BASE_URL: 'https://services.leadconnectorhq.com',
     GHL_API_VERSION: '2021-07-28',
     GHL_LOCATION_ID: 'location-1',
+    ...overrides,
   };
 
   return {

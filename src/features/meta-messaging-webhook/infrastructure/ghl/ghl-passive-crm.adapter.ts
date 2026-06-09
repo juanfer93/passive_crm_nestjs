@@ -95,11 +95,19 @@ export class GhlPassiveCrmAdapter implements CrmSinkPort {
   }
 
   private async safeJsonWrite(operation: string, write: () => Promise<void>): Promise<void> {
+    if (!this.isEnabled) {
+      return;
+    }
+
     try {
       await write();
     } catch (error: unknown) {
       this.logger.error(`GHL destination JSON write failed: ${operation}`, error);
     }
+  }
+
+  private get isEnabled(): boolean {
+    return this.config.get<string>('GHL_SYNC_ENABLED') === 'true';
   }
 
   private get baseUrl(): string {
