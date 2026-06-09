@@ -30,7 +30,13 @@ async function bootstrap(): Promise<void> {
 
   try {
     while (true) {
-      const text = (await rl.question('Cliente> ')).trim();
+      const question = await readQuestion(rl, 'Cliente> ');
+
+      if (question === undefined) {
+        break;
+      }
+
+      const text = question.trim();
 
       if (!text || text === '/exit') {
         break;
@@ -94,3 +100,18 @@ bootstrap().catch((error: unknown) => {
   output.write(`Error: ${error instanceof Error ? error.message : String(error)}\n`);
   process.exit(1);
 });
+
+async function readQuestion(
+  rl: ReturnType<typeof createInterface>,
+  prompt: string,
+): Promise<string | undefined> {
+  try {
+    return await rl.question(prompt);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'readline was closed') {
+      return undefined;
+    }
+
+    throw error;
+  }
+}
