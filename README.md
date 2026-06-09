@@ -139,6 +139,10 @@ pnpm build
 
 Los tests actuales cubren extraccion de eventos Messenger/Instagram, normalizacion de custom fields, validacion de firma Meta y el formato de custom fields enviado a GHL.
 
+## Flujo Git/GitHub
+
+Este proyecto lo desarrolla una sola persona. Cuando Codex suba cambios a GitHub, debe trabajar directamente sobre `main` y hacer push a `main`. No crear ramas nuevas salvo que se pida explicitamente o que el proyecto pase a tener un equipo mas grande.
+
 ## Notas de resiliencia
 
 El adaptador `GhlPassiveCrmAdapter` encapsula sus fallos con `Logger`. Si el destino GHL falla, el caso de uso principal no se interrumpe y la respuesta al usuario final por Meta sigue siendo prioritaria.
