@@ -4,8 +4,16 @@ import { createHmac } from 'node:crypto';
 import { MetaSignatureGuard } from '@/features/meta-messaging-webhook/presentation/guards/meta-signature.guard';
 
 describe('MetaSignatureGuard', () => {
-  it('allows requests when META_APP_SECRET is not configured', () => {
+  it('rejects requests when signature validation is enabled and META_APP_SECRET is missing', () => {
     const guard = new MetaSignatureGuard({ get: () => undefined } as unknown as ConfigService);
+
+    expect(guard.canActivate({} as ExecutionContext)).toBe(false);
+  });
+
+  it('allows explicit local bypass only when signature validation is disabled', () => {
+    const guard = new MetaSignatureGuard({
+      get: (key: string) => (key === 'META_SIGNATURE_VALIDATION_DISABLED' ? 'true' : undefined),
+    } as unknown as ConfigService);
 
     expect(guard.canActivate({} as ExecutionContext)).toBe(true);
   });

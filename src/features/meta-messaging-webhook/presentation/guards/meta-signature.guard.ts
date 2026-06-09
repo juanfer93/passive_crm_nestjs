@@ -10,10 +10,17 @@ export class MetaSignatureGuard implements CanActivate {
   constructor(private readonly config: ConfigService) {}
 
   canActivate(context: ExecutionContext): boolean {
+    const validationDisabled =
+      this.config.get<string>('META_SIGNATURE_VALIDATION_DISABLED') === 'true';
+
+    if (validationDisabled) {
+      return true;
+    }
+
     const appSecret = this.config.get<string>('META_APP_SECRET');
 
     if (!appSecret) {
-      return true;
+      return false;
     }
 
     const request = context.switchToHttp().getRequest<RawBodyRequest>();

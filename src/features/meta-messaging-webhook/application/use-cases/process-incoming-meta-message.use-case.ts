@@ -180,6 +180,10 @@ export class ProcessIncomingMetaMessageUseCase {
 
     const media = await this.mediaReader.getMediaContent(message.mediaReference);
 
+    if (!this.isExpectedMediaContent(message.kind, media.mimeType)) {
+      return this.unsupportedMediaMessage();
+    }
+
     if (message.kind === 'audio') {
       return this.mediaAnalyzer.transcribeAudio(media);
     }
@@ -190,6 +194,20 @@ export class ProcessIncomingMetaMessageUseCase {
     }
 
     return message.text ?? this.unsupportedMediaMessage();
+  }
+
+  private isExpectedMediaContent(kind: IncomingMetaMessage['kind'], mimeType: string): boolean {
+    const normalizedMimeType = mimeType.toLowerCase().split(';')[0].trim();
+
+    if (kind === 'audio') {
+      return normalizedMimeType.startsWith('audio/');
+    }
+
+    if (kind === 'image') {
+      return normalizedMimeType.startsWith('image/');
+    }
+
+    return false;
   }
 
   private unsupportedMediaMessage(): string {

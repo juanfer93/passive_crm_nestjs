@@ -8,6 +8,13 @@ import { MetaMessengerPort } from '@/features/meta-messaging-webhook/domain/port
 
 @Injectable()
 export class MetaMessagingAdapter implements MetaMessengerPort, MediaContentReaderPort {
+  private readonly defaultMediaAllowedHostSuffixes = [
+    'fbcdn.net',
+    'facebook.com',
+    'fbsbx.com',
+    'cdninstagram.com',
+  ];
+
   constructor(
     private readonly http: HttpService,
     private readonly config: ConfigService,
@@ -33,12 +40,11 @@ export class MetaMessagingAdapter implements MetaMessengerPort, MediaContentRead
 
   async getMediaContent(mediaReference: string): Promise<MediaContent> {
     if (this.isUrl(mediaReference)) {
-      const media = await this.http.axiosRef.get<ArrayBuffer>(mediaReference, {
-        responseType: 'arraybuffer',
-      });
+      const mediaUrl = this.assertAllowedMediaUrl(mediaReference);
+      const media = await this.fetchMediaUrl(mediaUrl);
 
       return {
-        id: mediaReference,
+        id: mediaUrl.toString(),
         mimeType: this.headerAsString(media.headers['content-type']) ?? 'application/octet-stream',
         bytes: Buffer.from(media.data),
       };
@@ -49,10 +55,8 @@ export class MetaMessagingAdapter implements MetaMessengerPort, MediaContentRead
       { headers: this.authorizationHeaders },
     );
 
-    const media = await this.http.axiosRef.get<ArrayBuffer>(metadata.data.url, {
-      headers: this.authorizationHeaders,
-      responseType: 'arraybuffer',
-    });
+    const mediaUrl = this.assertAllowedMediaUrl(metadata.data.url);
+    const media = await this.fetchMediaUrl(mediaUrl, this.authorizationHeaders);
 
     return {
       id: mediaReference,
@@ -92,6 +96,62 @@ export class MetaMessagingAdapter implements MetaMessengerPort, MediaContentRead
 
   private isUrl(value: string): boolean {
     return value.startsWith('http://') || value.startsWith('https://');
+  }
+
+  private assertAllowedMediaUrl(value: string): URL {
+    const url = new URL(value);
+
+    if (url.protocol !== 'https:') {
+      throw new Error('Meta media URL must use HTTPS.');
+    }
+
+    const hostname = url.hostname.toLowerCase();
+    const allowed = this.mediaAllowedHostSuffixes.some(
+      (suffix) => hostname === suffix || hostname.endsWith(`.${suffix}`),
+    );
+
+    if (!allowed) {
+      throw new Error(`Meta media URL host is not allowed: ${url.hostname}`);
+    }
+
+    return url;
+  }
+
+  private async fetchMediaUrl(
+    url: URL,
+    headers?: Record<string, string>,
+  ): Promise<{ data: ArrayBuffer; headers: Record<string, unknown> }> {
+    const response = await this.http.axiosRef.get<ArrayBuffer>(url.toString(), {
+      headers,
+      maxBodyLength: this.maxMediaBytes,
+      maxContentLength: this.maxMediaBytes,
+      maxRedirects: 0,
+      responseType: 'arraybuffer',
+    });
+    const bytes = Buffer.from(response.data);
+
+    if (bytes.byteLength > this.maxMediaBytes) {
+      throw new Error('Meta media payload exceeds the configured size limit.');
+    }
+
+    return { data: response.data, headers: response.headers };
+  }
+
+  private get mediaAllowedHostSuffixes(): string[] {
+    const configuredHosts = this.config.get<string>('META_MEDIA_ALLOWED_HOSTS');
+
+    if (!configuredHosts) {
+      return this.defaultMediaAllowedHostSuffixes;
+    }
+
+    return configuredHosts
+      .split(',')
+      .map((host) => host.trim().toLowerCase())
+      .filter(Boolean);
+  }
+
+  private get maxMediaBytes(): number {
+    return this.config.get<number>('META_MEDIA_MAX_BYTES', 20 * 1024 * 1024);
   }
 
   private headerAsString(value: unknown): string | undefined {
