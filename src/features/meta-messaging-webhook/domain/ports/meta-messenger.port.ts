@@ -3,5 +3,10 @@ import { MetaMessagingChannel } from '@/features/meta-messaging-webhook/domain/e
 export const META_MESSENGER = Symbol('META_MESSENGER');
 
 export interface MetaMessengerPort {
-  sendTextMessage(channel: MetaMessagingChannel, recipientId: string, text: string): Promise<void>;
+  sendTextMessage(
+    channel: MetaMessagingChannel,
+    recipientId: string,
+    text: string,
+    pageId?: string,
+  ): Promise<void>;
 }

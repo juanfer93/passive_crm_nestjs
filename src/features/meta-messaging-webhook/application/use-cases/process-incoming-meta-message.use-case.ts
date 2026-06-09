@@ -107,7 +107,12 @@ export class ProcessIncomingMetaMessageUseCase {
         return;
       }
 
-      await this.messenger.sendTextMessage(message.channel, message.contactId, reply);
+      await this.messenger.sendTextMessage(
+        message.channel,
+        message.contactId,
+        reply,
+        message.pageId,
+      );
       await this.conversationState.appendMessage({
         id: `${message.messageId}:outbound`,
         channel: message.channel,
@@ -149,7 +154,7 @@ export class ProcessIncomingMetaMessageUseCase {
             dealerProfile,
           });
 
-    await this.messenger.sendTextMessage(message.channel, message.contactId, reply);
+    await this.messenger.sendTextMessage(message.channel, message.contactId, reply, message.pageId);
 
     const outboundMessage: ConversationMessage = {
       id: `${message.messageId}:outbound`,
@@ -178,7 +183,7 @@ export class ProcessIncomingMetaMessageUseCase {
       return message.text ?? this.unsupportedMediaMessage();
     }
 
-    const media = await this.mediaReader.getMediaContent(message.mediaReference);
+    const media = await this.mediaReader.getMediaContent(message.mediaReference, message.pageId);
 
     if (!this.isExpectedMediaContent(message.kind, media.mimeType)) {
       return this.unsupportedMediaMessage();

@@ -6,6 +6,12 @@ import { MediaContent } from '@/features/meta-messaging-webhook/domain/entities/
 import { MediaContentReaderPort } from '@/features/meta-messaging-webhook/domain/ports/media-content-reader.port';
 import { MetaMessengerPort } from '@/features/meta-messaging-webhook/domain/ports/meta-messenger.port';
 
+interface MetaPageCredentials {
+  pageId: string;
+  accessToken: string | undefined;
+  accessTokenKey: string;
+}
+
 @Injectable()
 export class MetaMessagingAdapter implements MetaMessengerPort, MediaContentReaderPort {
   private readonly defaultMediaAllowedHostSuffixes = [
@@ -24,8 +30,9 @@ export class MetaMessagingAdapter implements MetaMessengerPort, MediaContentRead
     channel: MetaMessagingChannel,
     recipientId: string,
     text: string,
+    pageId?: string,
   ): Promise<void> {
-    const metaNodeId = this.metaNodeIdFor(channel);
+    const metaNodeId = this.metaNodeIdFor(channel, pageId);
 
     await this.http.axiosRef.post(
       `${this.graphUrl}/${metaNodeId}/messages`,
@@ -34,11 +41,11 @@ export class MetaMessagingAdapter implements MetaMessengerPort, MediaContentRead
         recipient: { id: recipientId },
         message: { text },
       },
-      { headers: this.authorizationHeaders },
+      { headers: this.authorizationHeadersForPage(pageId) },
     );
   }
 
-  async getMediaContent(mediaReference: string): Promise<MediaContent> {
+  async getMediaContent(mediaReference: string, pageId?: string): Promise<MediaContent> {
     if (this.isUrl(mediaReference)) {
       const mediaUrl = this.assertAllowedMediaUrl(mediaReference);
       const media = await this.fetchMediaUrl(mediaUrl);
@@ -52,11 +59,11 @@ export class MetaMessagingAdapter implements MetaMessengerPort, MediaContentRead
 
     const metadata = await this.http.axiosRef.get<{ url: string; mime_type?: string }>(
       `${this.graphUrl}/${mediaReference}`,
-      { headers: this.authorizationHeaders },
+      { headers: this.authorizationHeadersForPage(pageId) },
     );
 
     const mediaUrl = this.assertAllowedMediaUrl(metadata.data.url);
-    const media = await this.fetchMediaUrl(mediaUrl, this.authorizationHeaders);
+    const media = await this.fetchMediaUrl(mediaUrl, this.authorizationHeadersForPage(pageId));
 
     return {
       id: mediaReference,
@@ -74,24 +81,68 @@ export class MetaMessagingAdapter implements MetaMessengerPort, MediaContentRead
     return `${baseUrl}/${version}`;
   }
 
-  private metaNodeIdFor(channel: MetaMessagingChannel): string {
+  private metaNodeIdFor(channel: MetaMessagingChannel, pageId?: string): string {
+    if (pageId) {
+      return pageId;
+    }
+
     if (channel === 'instagram') {
       return (
         this.config.get<string>('META_INSTAGRAM_ACCOUNT_ID') ??
+        this.config.get<string>('META_PAGE_1_ID') ??
         this.config.getOrThrow<string>('META_PAGE_ID')
       );
     }
 
     return (
       this.config.get<string>('META_MESSENGER_PAGE_ID') ??
+      this.config.get<string>('META_PAGE_1_ID') ??
       this.config.getOrThrow<string>('META_PAGE_ID')
     );
   }
 
-  private get authorizationHeaders(): Record<string, string> {
+  private authorizationHeadersForPage(pageId?: string): Record<string, string> {
     return {
-      Authorization: `Bearer ${this.config.getOrThrow<string>('META_ACCESS_TOKEN')}`,
+      Authorization: `Bearer ${this.accessTokenForPage(pageId)}`,
     };
+  }
+
+  private accessTokenForPage(pageId?: string): string {
+    const matchingCredentials = pageId
+      ? this.metaPageCredentials.find((credentials) => credentials.pageId === pageId)
+      : undefined;
+
+    if (matchingCredentials) {
+      if (!matchingCredentials.accessToken) {
+        throw new Error(`${matchingCredentials.accessTokenKey} is required for Meta page ${pageId}.`);
+      }
+
+      return matchingCredentials.accessToken;
+    }
+
+    return (
+      this.config.get<string>('META_PAGE_1_ACCESS_TOKEN') ??
+      this.config.getOrThrow<string>('META_ACCESS_TOKEN')
+    );
+  }
+
+  private get metaPageCredentials(): MetaPageCredentials[] {
+    return [1, 2]
+      .map((index) => {
+        const pageId = this.config.get<string>(`META_PAGE_${index}_ID`);
+        const accessTokenKey = `META_PAGE_${index}_ACCESS_TOKEN`;
+
+        if (!pageId) {
+          return undefined;
+        }
+
+        return {
+          pageId,
+          accessToken: this.config.get<string>(accessTokenKey),
+          accessTokenKey,
+        };
+      })
+      .filter((credentials): credentials is MetaPageCredentials => Boolean(credentials));
   }
 
   private isUrl(value: string): boolean {

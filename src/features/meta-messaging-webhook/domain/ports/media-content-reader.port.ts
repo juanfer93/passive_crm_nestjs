@@ -3,5 +3,5 @@ import { MediaContent } from '@/features/meta-messaging-webhook/domain/entities/
 export const MEDIA_CONTENT_READER = Symbol('MEDIA_CONTENT_READER');
 
 export interface MediaContentReaderPort {
-  getMediaContent(mediaReference: string): Promise<MediaContent>;
+  getMediaContent(mediaReference: string, pageId?: string): Promise<MediaContent>;
 }

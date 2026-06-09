@@ -20,6 +20,7 @@ describe('ProcessIncomingMetaMessageUseCase media security', () => {
       messageId: 'message-1',
       channel: 'messenger',
       contactId: 'contact-1',
+      pageId: 'page-1',
       kind: 'audio',
       mediaReference: 'media-1',
       occurredAt: new Date('2026-01-01T00:00:00.000Z'),
@@ -29,23 +30,25 @@ describe('ProcessIncomingMetaMessageUseCase media security', () => {
       transcribeAudio: jest.fn(),
       describeImage: jest.fn(),
     };
+    const mediaReader = {
+      getMediaContent: jest.fn().mockResolvedValue({
+        id: 'media-1',
+        mimeType: 'application/json',
+        bytes: Buffer.from('{"private":true}'),
+      }),
+    };
     const assistant = { generateReply: jest.fn().mockResolvedValue('Reply') };
+    const messenger = { sendTextMessage: jest.fn() };
     const useCase = new ProcessIncomingMetaMessageUseCase(
       extractor as unknown as MetaWebhookMessageExtractor,
       { resolve: jest.fn(() => dealerProfile) } as unknown as DealerProfileResolver,
       { reserve: jest.fn().mockResolvedValue(true) } as unknown as MessageIdempotencyStore,
       conversationStateRepository(),
-      {
-        getMediaContent: jest.fn().mockResolvedValue({
-          id: 'media-1',
-          mimeType: 'application/json',
-          bytes: Buffer.from('{"private":true}'),
-        }),
-      } as unknown as MediaContentReaderPort,
+      mediaReader as unknown as MediaContentReaderPort,
       mediaAnalyzer as unknown as MediaAnalyzerPort,
       assistant as unknown as AssistantReplyGeneratorPort,
       { extractLeadCustomFields: jest.fn().mockResolvedValue({}) } as unknown as LeadCustomFieldsExtractorPort,
-      { sendTextMessage: jest.fn() } as unknown as MetaMessengerPort,
+      messenger as unknown as MetaMessengerPort,
       {
         updateCustomFields: jest.fn(),
         recordConversationMessage: jest.fn(),
@@ -55,12 +58,19 @@ describe('ProcessIncomingMetaMessageUseCase media security', () => {
 
     await useCase.execute({} as MetaWebhookPayload);
 
+    expect(mediaReader.getMediaContent).toHaveBeenCalledWith('media-1', 'page-1');
     expect(mediaAnalyzer.transcribeAudio).not.toHaveBeenCalled();
     expect(assistant.generateReply).toHaveBeenCalledWith(
       expect.objectContaining({
         userMessage:
           'El cliente envio un archivo sin texto util para la calificacion. Continua con la siguiente pregunta pendiente.',
       }),
+    );
+    expect(messenger.sendTextMessage).toHaveBeenCalledWith(
+      'messenger',
+      'contact-1',
+      'Reply',
+      'page-1',
     );
   });
 });
