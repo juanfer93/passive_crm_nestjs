@@ -10,16 +10,26 @@ export const CONVERSATION_STATE_REPOSITORY = Symbol('CONVERSATION_STATE_REPOSITO
 
 export interface ConversationStateRepository {
   appendMessage(message: ConversationMessage): Promise<void>;
-  getState(channel: MetaMessagingChannel, contactId: string): Promise<ConversationState | null>;
+  getState(
+    channel: MetaMessagingChannel,
+    contactId: string,
+    pageId?: string,
+  ): Promise<ConversationState | null>;
   mergeLeadCustomFields(
     channel: MetaMessagingChannel,
     contactId: string,
     fields: LeadCustomFields,
+    pageId?: string,
   ): Promise<LeadQualificationState>;
-  reactivateLeadQualification(channel: MetaMessagingChannel, contactId: string): Promise<void>;
+  reactivateLeadQualification(
+    channel: MetaMessagingChannel,
+    contactId: string,
+    pageId?: string,
+  ): Promise<void>;
   getRecentMessages(
     channel: MetaMessagingChannel,
     contactId: string,
     limit: number,
+    pageId?: string,
   ): Promise<ConversationMessage[]>;
 }

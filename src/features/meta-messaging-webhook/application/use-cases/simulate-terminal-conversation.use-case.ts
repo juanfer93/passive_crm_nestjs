@@ -23,6 +23,7 @@ import {
 
 export interface SimulateTerminalConversationInput {
   channel: MetaMessagingChannel;
+  pageId?: string;
   contactId: string;
   profileKey: string;
   text: string;
@@ -53,6 +54,7 @@ export class SimulateTerminalConversationUseCase {
     const inboundMessage: ConversationMessage = {
       id: `terminal:${Date.now()}`,
       channel: input.channel,
+      pageId: input.pageId,
       contactId: input.contactId,
       direction: 'inbound',
       kind: 'text',
@@ -60,12 +62,20 @@ export class SimulateTerminalConversationUseCase {
       occurredAt: new Date(),
     };
 
-    const currentState = await this.conversationState.getState(input.channel, input.contactId);
+    const currentState = await this.conversationState.getState(
+      input.channel,
+      input.contactId,
+      input.pageId,
+    );
     const shouldReactivate = shouldReactivateLeadQualification(currentState, new Date());
     const hasPriorConversation = !shouldReactivate && Boolean(currentState?.messages.length);
 
     if (shouldReactivate) {
-      await this.conversationState.reactivateLeadQualification(input.channel, input.contactId);
+      await this.conversationState.reactivateLeadQualification(
+        input.channel,
+        input.contactId,
+        input.pageId,
+      );
     }
 
     await this.conversationState.appendMessage(inboundMessage);
@@ -77,6 +87,7 @@ export class SimulateTerminalConversationUseCase {
         await this.conversationState.appendMessage({
           id: `${inboundMessage.id}:outbound`,
           channel: input.channel,
+          pageId: input.pageId,
           contactId: input.contactId,
           direction: 'outbound',
           kind: 'text',
@@ -96,7 +107,12 @@ export class SimulateTerminalConversationUseCase {
 
     const recentMessages = shouldReactivate
       ? [inboundMessage]
-      : await this.conversationState.getRecentMessages(input.channel, input.contactId, 12);
+      : await this.conversationState.getRecentMessages(
+          input.channel,
+          input.contactId,
+          12,
+          input.pageId,
+        );
     const extractedFields = await this.leadFieldsExtractor.extractLeadCustomFields({
       channel: input.channel,
       contactId: input.contactId,
@@ -108,6 +124,7 @@ export class SimulateTerminalConversationUseCase {
       input.channel,
       input.contactId,
       extractedFields,
+      input.pageId,
     );
     const reply =
       leadQualification.status === 'completed'
@@ -125,6 +142,7 @@ export class SimulateTerminalConversationUseCase {
     const outboundMessage: ConversationMessage = {
       id: `${inboundMessage.id}:outbound`,
       channel: input.channel,
+      pageId: input.pageId,
       contactId: input.contactId,
       direction: 'outbound',
       kind: 'text',

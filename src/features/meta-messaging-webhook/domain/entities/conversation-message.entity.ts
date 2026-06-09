@@ -5,6 +5,7 @@ export type MetaMessagingChannel = 'messenger' | 'instagram';
 export interface ConversationMessage {
   id: string;
   channel: MetaMessagingChannel;
+  pageId?: string;
   contactId: string;
   direction: ConversationMessageDirection;
   kind: ConversationMessageKind;

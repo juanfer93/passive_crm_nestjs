@@ -23,7 +23,11 @@ export class MongoConversationStateRepository implements ConversationStateReposi
 
   async appendMessage(message: ConversationMessage): Promise<void> {
     const now = new Date();
-    const conversationKey = this.toConversationKey(message.channel, message.contactId);
+    const conversationKey = this.toConversationKey(
+      message.channel,
+      message.contactId,
+      message.pageId,
+    );
 
     await this.conversationModel
       .updateOne(
@@ -33,6 +37,7 @@ export class MongoConversationStateRepository implements ConversationStateReposi
           $setOnInsert: {
             conversationKey,
             channel: message.channel,
+            ...(message.pageId ? { pageId: message.pageId } : {}),
             contactId: message.contactId,
             leadCustomFields: {},
             qualificationStatus: 'active',
@@ -48,9 +53,10 @@ export class MongoConversationStateRepository implements ConversationStateReposi
   async getState(
     channel: MetaMessagingChannel,
     contactId: string,
+    pageId?: string,
   ): Promise<ConversationState | null> {
     const conversation = await this.conversationModel
-      .findOne({ conversationKey: this.toConversationKey(channel, contactId) })
+      .findOne({ conversationKey: this.toConversationKey(channel, contactId, pageId) })
       .lean()
       .exec();
 
@@ -60,6 +66,7 @@ export class MongoConversationStateRepository implements ConversationStateReposi
 
     return {
       channel: conversation.channel,
+      pageId: conversation.pageId,
       contactId: conversation.contactId,
       messages: conversation.messages ?? [],
       leadCustomFields: conversation.leadCustomFields ?? {},
@@ -72,10 +79,11 @@ export class MongoConversationStateRepository implements ConversationStateReposi
     channel: MetaMessagingChannel,
     contactId: string,
     fields: LeadCustomFields,
+    pageId?: string,
   ): Promise<LeadQualificationState> {
     const now = new Date();
-    const conversationKey = this.toConversationKey(channel, contactId);
-    const current = await this.getState(channel, contactId);
+    const conversationKey = this.toConversationKey(channel, contactId, pageId);
+    const current = await this.getState(channel, contactId, pageId);
     const customFields = {
       ...(current?.leadCustomFields ?? {}),
       ...this.withoutEmptyValues(fields),
@@ -97,6 +105,7 @@ export class MongoConversationStateRepository implements ConversationStateReposi
           $setOnInsert: {
             conversationKey,
             channel,
+            ...(pageId ? { pageId } : {}),
             contactId,
             createdAt: now,
           },
@@ -115,10 +124,11 @@ export class MongoConversationStateRepository implements ConversationStateReposi
   async reactivateLeadQualification(
     channel: MetaMessagingChannel,
     contactId: string,
+    pageId?: string,
   ): Promise<void> {
     await this.conversationModel
       .updateOne(
-        { conversationKey: this.toConversationKey(channel, contactId) },
+        { conversationKey: this.toConversationKey(channel, contactId, pageId) },
         {
           $set: {
             updatedAt: new Date(),
@@ -137,10 +147,11 @@ export class MongoConversationStateRepository implements ConversationStateReposi
     channel: MetaMessagingChannel,
     contactId: string,
     limit: number,
+    pageId?: string,
   ): Promise<ConversationMessage[]> {
     const conversation = await this.conversationModel
       .findOne(
-        { conversationKey: this.toConversationKey(channel, contactId) },
+        { conversationKey: this.toConversationKey(channel, contactId, pageId) },
         { messages: { $slice: -limit } },
       )
       .lean()
@@ -149,8 +160,12 @@ export class MongoConversationStateRepository implements ConversationStateReposi
     return conversation?.messages ?? [];
   }
 
-  private toConversationKey(channel: MetaMessagingChannel, contactId: string): string {
-    return `${channel}:${contactId}`;
+  private toConversationKey(
+    channel: MetaMessagingChannel,
+    contactId: string,
+    pageId?: string,
+  ): string {
+    return `${channel}:${pageId ?? 'local'}:${contactId}`;
   }
 
   private withoutEmptyValues(fields: LeadCustomFields): LeadCustomFields {

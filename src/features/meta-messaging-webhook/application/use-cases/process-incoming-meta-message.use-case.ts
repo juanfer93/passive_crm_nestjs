@@ -82,6 +82,7 @@ export class ProcessIncomingMetaMessageUseCase {
     const inboundMessage: ConversationMessage = {
       id: message.messageId,
       channel: message.channel,
+      pageId: message.pageId,
       contactId: message.contactId,
       direction: 'inbound',
       kind: message.kind,
@@ -90,12 +91,20 @@ export class ProcessIncomingMetaMessageUseCase {
     };
 
     const dealerProfile = this.dealerProfiles.resolve({ pageId: message.pageId });
-    const currentState = await this.conversationState.getState(message.channel, message.contactId);
+    const currentState = await this.conversationState.getState(
+      message.channel,
+      message.contactId,
+      message.pageId,
+    );
     const shouldReactivate = shouldReactivateLeadQualification(currentState, new Date());
     const hasPriorConversation = !shouldReactivate && Boolean(currentState?.messages.length);
 
     if (shouldReactivate) {
-      await this.conversationState.reactivateLeadQualification(message.channel, message.contactId);
+      await this.conversationState.reactivateLeadQualification(
+        message.channel,
+        message.contactId,
+        message.pageId,
+      );
     }
 
     await this.conversationState.appendMessage(inboundMessage);
@@ -116,6 +125,7 @@ export class ProcessIncomingMetaMessageUseCase {
       await this.conversationState.appendMessage({
         id: `${message.messageId}:outbound`,
         channel: message.channel,
+        pageId: message.pageId,
         contactId: message.contactId,
         direction: 'outbound',
         kind: 'text',
@@ -128,7 +138,12 @@ export class ProcessIncomingMetaMessageUseCase {
 
     const recentMessages = shouldReactivate
       ? [inboundMessage]
-      : await this.conversationState.getRecentMessages(message.channel, message.contactId, 12);
+      : await this.conversationState.getRecentMessages(
+          message.channel,
+          message.contactId,
+          12,
+          message.pageId,
+        );
     const extractedFields = await this.leadFieldsExtractor.extractLeadCustomFields({
       channel: message.channel,
       contactId: message.contactId,
@@ -140,6 +155,7 @@ export class ProcessIncomingMetaMessageUseCase {
       message.channel,
       message.contactId,
       extractedFields,
+      message.pageId,
     );
     const reply =
       leadQualification.status === 'completed'
@@ -159,6 +175,7 @@ export class ProcessIncomingMetaMessageUseCase {
     const outboundMessage: ConversationMessage = {
       id: `${message.messageId}:outbound`,
       channel: message.channel,
+      pageId: message.pageId,
       contactId: message.contactId,
       direction: 'outbound',
       kind: 'text',

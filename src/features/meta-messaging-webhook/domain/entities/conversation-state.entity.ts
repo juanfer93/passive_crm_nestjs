@@ -6,6 +6,7 @@ import {
 
 export interface ConversationState {
   channel: MetaMessagingChannel;
+  pageId?: string;
   contactId: string;
   messages: ConversationMessage[];
   leadCustomFields: LeadCustomFields;

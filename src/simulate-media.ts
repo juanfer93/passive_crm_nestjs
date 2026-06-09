@@ -18,6 +18,7 @@ type SimulatedMediaType = 'audio' | 'image' | 'unknown';
 interface CliArgs {
   channel: MetaMessagingChannel;
   contactId: string;
+  pageId?: string;
   filePath: string;
   profileKey: string;
   transcribeOnly: boolean;
@@ -65,6 +66,7 @@ async function bootstrap(): Promise<void> {
     output.write(`Dealer: ${profile.displayName}\n`);
     output.write(`Contacto: ${args.contactId}\n`);
     output.write(`Canal: ${args.channel}\n`);
+    output.write(`Pagina: ${args.pageId ?? 'local'}\n`);
     output.write(`Archivo: ${absolutePath}\n`);
     output.write(`Tipo: ${type}\n\n`);
     output.write(`${mediaLogLabel(type)}> ${mediaText}\n\n`);
@@ -76,6 +78,7 @@ async function bootstrap(): Promise<void> {
     const result = await simulator.execute({
       channel: args.channel,
       contactId: args.contactId,
+      pageId: args.pageId,
       profileKey: args.profileKey,
       text: mediaText,
     });
@@ -106,6 +109,7 @@ function parseArgs(argv: string[]): CliArgs {
   return {
     channel: parseChannel(readArg(argv, 'channel') ?? process.env.SIMULATE_MEDIA_CHANNEL ?? 'messenger'),
     contactId: readArg(argv, 'contact') ?? process.env.SIMULATE_MEDIA_CONTACT ?? 'terminal-media-test',
+    pageId: readArg(argv, 'page') ?? process.env.SIMULATE_MEDIA_PAGE_ID,
     filePath,
     profileKey:
       readArg(argv, 'profile') ??

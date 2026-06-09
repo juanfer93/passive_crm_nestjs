@@ -20,7 +20,7 @@ Backend NestJS para Meta Messenger e Instagram Messaging con arquitectura Featur
 5. Si el mensaje ya existe, el caso de uso detiene el procesamiento.
 6. Si hay audio o imagen, el backend descarga el binario y lo procesa con OpenAI.
 7. El asistente genera la respuesta y se envia por la API de Meta.
-8. El estado conversacional se persiste en MongoDB usando `channel + senderId` como identidad del chat.
+8. El estado conversacional se persiste en MongoDB usando `channel + pageId + senderId` como identidad del chat, para que el mismo cliente pueda escribir a paginas distintas sin mezclar historiales.
 9. OpenAI consulta el historial reciente guardado en MongoDB y extrae custom fields de lead.
 10. La escritura JSON hacia el destino GHL ocurre de forma secundaria y no bloqueante.
 
@@ -90,6 +90,13 @@ El simulador usa MongoDB para guardar historial/custom fields y OpenAI para resp
 
 ```bash
 pnpm simulate:chat -- --profile offlease-fredericksburg --contact test-lead-1
+```
+
+Para simular el mismo contacto en paginas distintas sin mezclar estado:
+
+```bash
+pnpm simulate:chat -- --profile offlease-fredericksburg --contact test-lead-1 --page meta-page-1
+pnpm simulate:chat -- --profile offlease-fredericksburg --contact test-lead-1 --page meta-page-2
 ```
 
 Perfiles disponibles:

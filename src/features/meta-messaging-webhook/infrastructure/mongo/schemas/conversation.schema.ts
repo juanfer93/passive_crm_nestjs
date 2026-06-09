@@ -19,6 +19,9 @@ export class StoredConversationMessage implements ConversationMessage {
   @Prop({ required: true, enum: ['messenger', 'instagram'] })
   channel: MetaMessagingChannel;
 
+  @Prop()
+  pageId?: string;
+
   @Prop({ required: true })
   contactId: string;
 
@@ -46,6 +49,9 @@ export class Conversation {
 
   @Prop({ required: true, enum: ['messenger', 'instagram'] })
   channel: MetaMessagingChannel;
+
+  @Prop()
+  pageId?: string;
 
   @Prop({ required: true })
   contactId: string;

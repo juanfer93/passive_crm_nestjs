@@ -9,6 +9,7 @@ import { MetaMessagingChannel } from '@/features/meta-messaging-webhook/domain/e
 interface CliArgs {
   channel: MetaMessagingChannel;
   contactId: string;
+  pageId?: string;
   profileKey: string;
 }
 
@@ -26,6 +27,7 @@ async function bootstrap(): Promise<void> {
   output.write(`Dealer: ${profile.displayName}\n`);
   output.write(`Contacto: ${args.contactId}\n`);
   output.write(`Canal: ${args.channel}\n`);
+  output.write(`Pagina: ${args.pageId ?? 'local'}\n`);
   output.write(`Comandos: /exit para salir\n\n`);
 
   try {
@@ -45,6 +47,7 @@ async function bootstrap(): Promise<void> {
       const result = await simulator.execute({
         channel: args.channel,
         contactId: args.contactId,
+        pageId: args.pageId,
         profileKey: args.profileKey,
         text,
       });
@@ -73,6 +76,7 @@ function parseArgs(argv: string[]): CliArgs {
   return {
     channel: parseChannel(readArg(argv, 'channel') ?? process.env.SIMULATE_CHAT_CHANNEL ?? 'messenger'),
     contactId: readArg(argv, 'contact') ?? process.env.SIMULATE_CHAT_CONTACT ?? 'terminal-test',
+    pageId: readArg(argv, 'page') ?? process.env.SIMULATE_CHAT_PAGE_ID,
     profileKey:
       readArg(argv, 'profile') ??
       process.env.SIMULATE_CHAT_PROFILE ??

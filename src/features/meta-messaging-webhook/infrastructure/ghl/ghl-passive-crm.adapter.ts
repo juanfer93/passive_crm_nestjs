@@ -31,6 +31,7 @@ export class GhlPassiveCrmAdapter implements CrmSinkPort {
             source: 'nestjs-passive-crm',
             messageId: message.id,
             channel: message.channel,
+            pageId: message.pageId,
             contactId: message.contactId,
             kind: message.kind,
           },

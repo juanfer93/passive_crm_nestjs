@@ -195,6 +195,7 @@ describe('SimulateTerminalConversationUseCase', () => {
     expect(repository.reactivateLeadQualification).toHaveBeenCalledWith(
       'messenger',
       'contact-1',
+      undefined,
     );
     expect(extractor.extractLeadCustomFields).toHaveBeenCalledWith(
       expect.objectContaining({
