@@ -1,6 +1,7 @@
 import { ConversationMessage } from '@/features/meta-messaging-webhook/domain/entities/conversation-message.entity';
 import { MetaMessagingChannel } from '@/features/meta-messaging-webhook/domain/entities/conversation-message.entity';
 import { ConversationState } from '@/features/meta-messaging-webhook/domain/entities/conversation-state.entity';
+import { FollowUpState } from '@/features/meta-messaging-webhook/domain/entities/follow-up-state.entity';
 import {
   LeadCustomFields,
   LeadQualificationState,
@@ -32,4 +33,18 @@ export interface ConversationStateRepository {
     limit: number,
     pageId?: string,
   ): Promise<ConversationMessage[]>;
+  scheduleFollowUp(
+    channel: MetaMessagingChannel,
+    contactId: string,
+    followUp: FollowUpState,
+    pageId?: string,
+  ): Promise<void>;
+  cancelFollowUp(channel: MetaMessagingChannel, contactId: string, pageId?: string): Promise<void>;
+  findDueFollowUps(now: Date, limit: number): Promise<ConversationState[]>;
+  recordFollowUpAttempt(
+    channel: MetaMessagingChannel,
+    contactId: string,
+    followUp: FollowUpState,
+    pageId?: string,
+  ): Promise<void>;
 }

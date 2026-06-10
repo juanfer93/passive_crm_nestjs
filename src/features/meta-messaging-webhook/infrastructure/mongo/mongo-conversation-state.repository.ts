@@ -6,6 +6,7 @@ import {
   MetaMessagingChannel,
 } from '@/features/meta-messaging-webhook/domain/entities/conversation-message.entity';
 import { ConversationState } from '@/features/meta-messaging-webhook/domain/entities/conversation-state.entity';
+import { FollowUpState } from '@/features/meta-messaging-webhook/domain/entities/follow-up-state.entity';
 import {
   hasCompletedLeadCustomFields,
   LeadCustomFields,
@@ -41,6 +42,7 @@ export class MongoConversationStateRepository implements ConversationStateReposi
             contactId: message.contactId,
             leadCustomFields: {},
             qualificationStatus: 'active',
+            followUp: this.inactiveFollowUp(),
             createdAt: now,
           },
           $push: { messages: message },
@@ -72,6 +74,7 @@ export class MongoConversationStateRepository implements ConversationStateReposi
       leadCustomFields: conversation.leadCustomFields ?? {},
       qualificationStatus: conversation.qualificationStatus ?? 'active',
       qualificationCompletedAt: conversation.qualificationCompletedAt,
+      followUp: conversation.followUp ?? this.inactiveFollowUp(),
     };
   }
 
@@ -107,6 +110,7 @@ export class MongoConversationStateRepository implements ConversationStateReposi
             channel,
             ...(pageId ? { pageId } : {}),
             contactId,
+            followUp: this.inactiveFollowUp(),
             createdAt: now,
           },
         },
@@ -160,6 +164,67 @@ export class MongoConversationStateRepository implements ConversationStateReposi
     return conversation?.messages ?? [];
   }
 
+  async scheduleFollowUp(
+    channel: MetaMessagingChannel,
+    contactId: string,
+    followUp: FollowUpState,
+    pageId?: string,
+  ): Promise<void> {
+    await this.conversationModel
+      .updateOne(
+        { conversationKey: this.toConversationKey(channel, contactId, pageId) },
+        {
+          $set: {
+            updatedAt: new Date(),
+            followUp,
+          },
+        },
+      )
+      .exec();
+  }
+
+  async cancelFollowUp(
+    channel: MetaMessagingChannel,
+    contactId: string,
+    pageId?: string,
+  ): Promise<void> {
+    await this.scheduleFollowUp(channel, contactId, this.inactiveFollowUp(), pageId);
+  }
+
+  async findDueFollowUps(now: Date, limit: number): Promise<ConversationState[]> {
+    const conversations = await this.conversationModel
+      .find({
+        qualificationStatus: { $ne: 'completed' },
+        'followUp.status': 'active',
+        'followUp.attempts': { $lt: 3 },
+        'followUp.nextFollowUpAt': { $lte: now },
+      })
+      .sort({ 'followUp.nextFollowUpAt': 1 })
+      .limit(limit)
+      .lean()
+      .exec();
+
+    return conversations.map((conversation) => ({
+      channel: conversation.channel,
+      pageId: conversation.pageId,
+      contactId: conversation.contactId,
+      messages: conversation.messages ?? [],
+      leadCustomFields: conversation.leadCustomFields ?? {},
+      qualificationStatus: conversation.qualificationStatus ?? 'active',
+      qualificationCompletedAt: conversation.qualificationCompletedAt,
+      followUp: conversation.followUp ?? this.inactiveFollowUp(),
+    }));
+  }
+
+  async recordFollowUpAttempt(
+    channel: MetaMessagingChannel,
+    contactId: string,
+    followUp: FollowUpState,
+    pageId?: string,
+  ): Promise<void> {
+    await this.scheduleFollowUp(channel, contactId, followUp, pageId);
+  }
+
   private toConversationKey(
     channel: MetaMessagingChannel,
     contactId: string,
@@ -172,5 +237,9 @@ export class MongoConversationStateRepository implements ConversationStateReposi
     return Object.fromEntries(
       Object.entries(fields).filter(([, value]) => value !== undefined && value !== null && value !== ''),
     ) as LeadCustomFields;
+  }
+
+  private inactiveFollowUp(): FollowUpState {
+    return { status: 'inactive', attempts: 0 };
   }
 }

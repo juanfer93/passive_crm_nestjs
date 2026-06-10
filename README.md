@@ -129,6 +129,10 @@ pnpm simulate:media -- --profile offlease-fredericksburg --contact media-audio-t
 
 El output muestra `OpenAI audio transcription>` para audio, `Image analysis>` para imagenes y `Media notice>` para archivos no analizables.
 
+## Seguimientos automaticos
+
+Cuando el bot deja una pregunta pendiente y el lead no responde, el backend agenda seguimientos persistidos en MongoDB por conversacion (`channel + pageId + senderId`). El worker revisa seguimientos vencidos y envia hasta 3 mensajes, uno cada 2 horas. Si el lead responde, el seguimiento pendiente se cancela y el flujo normal decide si agenda uno nuevo. Si los custom fields requeridos ya estan completos y la calificacion queda `completed`, no se agenda ni se envia ningun seguimiento adicional.
+
 Webhook de Meta Messenger/Instagram:
 
 ```text

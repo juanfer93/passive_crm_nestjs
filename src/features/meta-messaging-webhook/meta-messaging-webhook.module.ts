@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AcceptMetaWebhookUseCase } from '@/features/meta-messaging-webhook/application/use-cases/accept-meta-webhook.use-case';
 import { ProcessIncomingMetaMessageUseCase } from '@/features/meta-messaging-webhook/application/use-cases/process-incoming-meta-message.use-case';
+import { ProcessDueFollowUpsUseCase } from '@/features/meta-messaging-webhook/application/use-cases/process-due-follow-ups.use-case';
 import { SimulateTerminalConversationUseCase } from '@/features/meta-messaging-webhook/application/use-cases/simulate-terminal-conversation.use-case';
 import { VerifyMetaWebhookUseCase } from '@/features/meta-messaging-webhook/application/use-cases/verify-meta-webhook.use-case';
 import { DealerProfileResolver } from '@/features/meta-messaging-webhook/application/services/dealer-profile-resolver.service';
@@ -17,6 +18,7 @@ import { MESSAGE_IDEMPOTENCY_STORE } from '@/features/meta-messaging-webhook/dom
 import { LEAD_CUSTOM_FIELDS_EXTRACTOR } from '@/features/meta-messaging-webhook/domain/ports/lead-custom-fields-extractor.port';
 import { META_MESSENGER } from '@/features/meta-messaging-webhook/domain/ports/meta-messenger.port';
 import { NodeBackgroundTaskRunner } from '@/features/meta-messaging-webhook/infrastructure/background/node-background-task-runner';
+import { NodeFollowUpWorker } from '@/features/meta-messaging-webhook/infrastructure/background/node-follow-up-worker';
 import { GhlPassiveCrmAdapter } from '@/features/meta-messaging-webhook/infrastructure/ghl/ghl-passive-crm.adapter';
 import { MetaMessagingAdapter } from '@/features/meta-messaging-webhook/infrastructure/meta/meta-messaging.adapter';
 import { MongoConversationStateRepository } from '@/features/meta-messaging-webhook/infrastructure/mongo/mongo-conversation-state.repository';
@@ -44,6 +46,7 @@ import { MetaSignatureGuard } from '@/features/meta-messaging-webhook/presentati
   controllers: [MetaMessagingWebhookController],
   providers: [
     AcceptMetaWebhookUseCase,
+    ProcessDueFollowUpsUseCase,
     ProcessIncomingMetaMessageUseCase,
     SimulateTerminalConversationUseCase,
     VerifyMetaWebhookUseCase,
@@ -54,6 +57,7 @@ import { MetaSignatureGuard } from '@/features/meta-messaging-webhook/presentati
     OpenAiAssistantAdapter,
     GhlPassiveCrmAdapter,
     NodeBackgroundTaskRunner,
+    NodeFollowUpWorker,
     {
       provide: BACKGROUND_TASK_RUNNER,
       useExisting: NodeBackgroundTaskRunner,

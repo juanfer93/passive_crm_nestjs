@@ -5,6 +5,10 @@ import {
   MetaMessagingChannel,
 } from '@/features/meta-messaging-webhook/domain/entities/conversation-message.entity';
 import {
+  FollowUpState,
+  FollowUpStatus,
+} from '@/features/meta-messaging-webhook/domain/entities/follow-up-state.entity';
+import {
   LeadCustomFields,
   LeadQualificationStatus,
 } from '@/features/meta-messaging-webhook/domain/entities/lead-custom-fields.entity';
@@ -42,6 +46,23 @@ export const StoredConversationMessageSchema = SchemaFactory.createForClass(
   StoredConversationMessage,
 );
 
+@Schema({ _id: false })
+export class StoredFollowUpState implements FollowUpState {
+  @Prop({ required: true, enum: ['inactive', 'active', 'exhausted'], default: 'inactive' })
+  status: FollowUpStatus;
+
+  @Prop({ required: true, default: 0 })
+  attempts: number;
+
+  @Prop()
+  nextFollowUpAt?: Date;
+
+  @Prop()
+  lastSentAt?: Date;
+}
+
+export const StoredFollowUpStateSchema = SchemaFactory.createForClass(StoredFollowUpState);
+
 @Schema({ collection: 'conversations', versionKey: false })
 export class Conversation {
   @Prop({ required: true, unique: true, index: true })
@@ -67,6 +88,12 @@ export class Conversation {
 
   @Prop()
   qualificationCompletedAt?: Date;
+
+  @Prop({
+    type: StoredFollowUpStateSchema,
+    default: () => ({ status: 'inactive', attempts: 0 }),
+  })
+  followUp: StoredFollowUpState;
 
   @Prop({ required: true })
   createdAt: Date;

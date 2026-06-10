@@ -1,3 +1,4 @@
+import { ConfigService } from '@nestjs/config';
 import { DealerProfileResolver } from '@/features/meta-messaging-webhook/application/services/dealer-profile-resolver.service';
 import { MetaWebhookMessageExtractor } from '@/features/meta-messaging-webhook/application/services/meta-webhook-message-extractor.service';
 import { ProcessIncomingMetaMessageUseCase } from '@/features/meta-messaging-webhook/application/use-cases/process-incoming-meta-message.use-case';
@@ -39,11 +40,12 @@ describe('ProcessIncomingMetaMessageUseCase media security', () => {
     };
     const assistant = { generateReply: jest.fn().mockResolvedValue('Reply') };
     const messenger = { sendTextMessage: jest.fn() };
+    const conversationState = conversationStateRepository();
     const useCase = new ProcessIncomingMetaMessageUseCase(
       extractor as unknown as MetaWebhookMessageExtractor,
       { resolve: jest.fn(() => dealerProfile) } as unknown as DealerProfileResolver,
       { reserve: jest.fn().mockResolvedValue(true) } as unknown as MessageIdempotencyStore,
-      conversationStateRepository(),
+      conversationState,
       mediaReader as unknown as MediaContentReaderPort,
       mediaAnalyzer as unknown as MediaAnalyzerPort,
       assistant as unknown as AssistantReplyGeneratorPort,
@@ -54,6 +56,7 @@ describe('ProcessIncomingMetaMessageUseCase media security', () => {
         recordConversationMessage: jest.fn(),
       } as unknown as CrmSinkPort,
       { run: jest.fn() } as unknown as BackgroundTaskRunnerPort,
+      { get: (_key: string, defaultValue?: unknown) => defaultValue } as unknown as ConfigService,
     );
 
     await useCase.execute({} as MetaWebhookPayload);
@@ -72,6 +75,78 @@ describe('ProcessIncomingMetaMessageUseCase media security', () => {
       'Reply',
       'page-1',
     );
+    expect(conversationState.cancelFollowUp).toHaveBeenCalledWith(
+      'messenger',
+      'contact-1',
+      'page-1',
+    );
+    expect(conversationState.scheduleFollowUp).toHaveBeenCalledWith(
+      'messenger',
+      'contact-1',
+      expect.objectContaining({
+        status: 'active',
+        attempts: 0,
+      }),
+      'page-1',
+    );
+  });
+
+  it('does not schedule a follow-up when custom fields complete the lead', async () => {
+    const message: IncomingMetaMessage = {
+      messageId: 'message-2',
+      channel: 'messenger',
+      contactId: 'contact-2',
+      pageId: 'page-1',
+      kind: 'text',
+      text: 'Mi numero es 3055555555',
+      occurredAt: new Date('2026-01-01T00:00:00.000Z'),
+    };
+    const conversationState = conversationStateRepository();
+    conversationState.mergeLeadCustomFields.mockResolvedValue({
+      status: 'completed',
+      customFields: {
+        purchase_timeline: 'esta semana',
+        lead_temperature: 'hot',
+        vehicle_type: 'Sedan',
+        down_payment: '2000',
+        document_status: 'confirmed',
+        phone: '3055555555',
+      },
+      completedAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+    const messenger = { sendTextMessage: jest.fn() };
+    const useCase = new ProcessIncomingMetaMessageUseCase(
+      { extract: jest.fn(() => [message]) } as unknown as MetaWebhookMessageExtractor,
+      { resolve: jest.fn(() => dealerProfile) } as unknown as DealerProfileResolver,
+      { reserve: jest.fn().mockResolvedValue(true) } as unknown as MessageIdempotencyStore,
+      conversationState,
+      { getMediaContent: jest.fn() } as unknown as MediaContentReaderPort,
+      { transcribeAudio: jest.fn(), describeImage: jest.fn() } as unknown as MediaAnalyzerPort,
+      { generateReply: jest.fn() } as unknown as AssistantReplyGeneratorPort,
+      { extractLeadCustomFields: jest.fn().mockResolvedValue({ phone: '3055555555' }) } as unknown as LeadCustomFieldsExtractorPort,
+      messenger as unknown as MetaMessengerPort,
+      {
+        updateCustomFields: jest.fn(),
+        recordConversationMessage: jest.fn(),
+      } as unknown as CrmSinkPort,
+      { run: jest.fn() } as unknown as BackgroundTaskRunnerPort,
+      { get: (_key: string, defaultValue?: unknown) => defaultValue } as unknown as ConfigService,
+    );
+
+    await useCase.execute({} as MetaWebhookPayload);
+
+    expect(messenger.sendTextMessage).toHaveBeenCalledWith(
+      'messenger',
+      'contact-2',
+      'Perfecto ✅ Ya tengo la información. Un especialista se comunicará pronto.',
+      'page-1',
+    );
+    expect(conversationState.cancelFollowUp).toHaveBeenCalledWith(
+      'messenger',
+      'contact-2',
+      'page-1',
+    );
+    expect(conversationState.scheduleFollowUp).not.toHaveBeenCalled();
   });
 });
 
@@ -83,12 +158,16 @@ const dealerProfile: DealerProfile = {
   assistantPrompt: 'Dealer qualification prompt.',
 };
 
-function conversationStateRepository(): ConversationStateRepository {
+function conversationStateRepository(): jest.Mocked<ConversationStateRepository> {
   return {
     getState: jest.fn().mockResolvedValue(undefined),
     appendMessage: jest.fn(),
     getRecentMessages: jest.fn().mockResolvedValue([]),
-    mergeLeadCustomFields: jest.fn().mockResolvedValue({ status: 'pending', customFields: {} }),
+    mergeLeadCustomFields: jest.fn().mockResolvedValue({ status: 'active', customFields: {} }),
     reactivateLeadQualification: jest.fn(),
-  } as unknown as ConversationStateRepository;
+    scheduleFollowUp: jest.fn(),
+    cancelFollowUp: jest.fn(),
+    findDueFollowUps: jest.fn(),
+    recordFollowUpAttempt: jest.fn(),
+  };
 }

@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { DealerProfileResolver } from '@/features/meta-messaging-webhook/application/services/dealer-profile-resolver.service';
 import { MetaWebhookMessageExtractor } from '@/features/meta-messaging-webhook/application/services/meta-webhook-message-extractor.service';
 import { ConversationMessage } from '@/features/meta-messaging-webhook/domain/entities/conversation-message.entity';
@@ -61,6 +62,7 @@ export class ProcessIncomingMetaMessageUseCase {
     private readonly crmSink: CrmSinkPort,
     @Inject(BACKGROUND_TASK_RUNNER)
     private readonly background: BackgroundTaskRunnerPort,
+    private readonly config: ConfigService,
   ) {}
 
   async execute(payload: MetaWebhookPayload): Promise<void> {
@@ -107,6 +109,7 @@ export class ProcessIncomingMetaMessageUseCase {
       );
     }
 
+    await this.conversationState.cancelFollowUp(message.channel, message.contactId, message.pageId);
     await this.conversationState.appendMessage(inboundMessage);
 
     if (currentState?.qualificationStatus === 'completed' && !shouldReactivate) {
@@ -157,6 +160,11 @@ export class ProcessIncomingMetaMessageUseCase {
       extractedFields,
       message.pageId,
     );
+
+    if (leadQualification.status === 'completed') {
+      await this.conversationState.cancelFollowUp(message.channel, message.contactId, message.pageId);
+    }
+
     const reply =
       leadQualification.status === 'completed'
         ? 'Perfecto ✅ Ya tengo la información. Un especialista se comunicará pronto.'
@@ -184,6 +192,20 @@ export class ProcessIncomingMetaMessageUseCase {
     };
 
     await this.conversationState.appendMessage(outboundMessage);
+
+    if (leadQualification.status !== 'completed') {
+      await this.conversationState.scheduleFollowUp(
+        message.channel,
+        message.contactId,
+        {
+          status: 'active',
+          attempts: 0,
+          nextFollowUpAt: this.nextFollowUpAt(new Date()),
+        },
+        message.pageId,
+      );
+    }
+
     this.syncToPassiveCrm(message, leadQualification.customFields, inboundMessage, outboundMessage);
   }
 
@@ -234,6 +256,15 @@ export class ProcessIncomingMetaMessageUseCase {
 
   private unsupportedMediaMessage(): string {
     return 'El cliente envio un archivo sin texto util para la calificacion. Continua con la siguiente pregunta pendiente.';
+  }
+
+  private nextFollowUpAt(from: Date): Date {
+    return new Date(from.getTime() + this.followUpDelayMs);
+  }
+
+  private get followUpDelayMs(): number {
+    const configuredHours = this.config.get<number>('FOLLOW_UP_DELAY_HOURS', 2);
+    return configuredHours * 60 * 60 * 1000;
   }
 
   private syncToPassiveCrm(

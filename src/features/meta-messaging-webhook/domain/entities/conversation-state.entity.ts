@@ -1,4 +1,5 @@
 import { ConversationMessage, MetaMessagingChannel } from '@/features/meta-messaging-webhook/domain/entities/conversation-message.entity';
+import { FollowUpState } from '@/features/meta-messaging-webhook/domain/entities/follow-up-state.entity';
 import {
   LeadCustomFields,
   LeadQualificationStatus,
@@ -12,4 +13,5 @@ export interface ConversationState {
   leadCustomFields: LeadCustomFields;
   qualificationStatus: LeadQualificationStatus;
   qualificationCompletedAt?: Date;
+  followUp?: FollowUpState;
 }
