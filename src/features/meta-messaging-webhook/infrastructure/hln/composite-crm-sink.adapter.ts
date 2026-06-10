@@ -1,7 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConversationMessage } from '@/features/meta-messaging-webhook/domain/entities/conversation-message.entity';
 import { LeadCustomFields } from '@/features/meta-messaging-webhook/domain/entities/lead-custom-fields.entity';
-import { CrmSinkPort } from '@/features/meta-messaging-webhook/domain/ports/crm-sink.port';
+import {
+  CrmLeadSyncContext,
+  CrmSinkPort,
+} from '@/features/meta-messaging-webhook/domain/ports/crm-sink.port';
 import { GhlPassiveCrmAdapter } from '@/features/meta-messaging-webhook/infrastructure/ghl/ghl-passive-crm.adapter';
 import { HlnCrmSinkAdapter } from '@/features/meta-messaging-webhook/infrastructure/hln/hln-crm-sink.adapter';
 
@@ -12,10 +15,14 @@ export class CompositeCrmSinkAdapter implements CrmSinkPort {
     private readonly ghl: GhlPassiveCrmAdapter,
     private readonly hln: HlnCrmSinkAdapter,
   ) { }
-  async updateCustomFields(contactPhone: string, fields: LeadCustomFields): Promise<void> {
+  async updateCustomFields(
+    contactPhone: string,
+    fields: LeadCustomFields,
+    context?: CrmLeadSyncContext,
+  ): Promise<void> {
     const [ghlResult, hlnResult] = await Promise.allSettled([
-      this.ghl.updateCustomFields(contactPhone, fields),
-      this.hln.updateCustomFields(contactPhone, fields),
+      this.ghl.updateCustomFields(contactPhone, fields, context),
+      this.hln.updateCustomFields(contactPhone, fields, context),
     ]);
     if (ghlResult.status === 'rejected') this.logger.error('GHL updateCustomFields failed', ghlResult.reason);
     if (hlnResult.status === 'rejected') this.logger.error('HLN updateCustomFields failed', hlnResult.reason);

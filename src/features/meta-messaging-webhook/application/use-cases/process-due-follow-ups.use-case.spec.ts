@@ -135,6 +135,7 @@ function repositoryMock(): jest.Mocked<ConversationStateRepository> {
     cancelFollowUp: jest.fn(),
     findDueFollowUps: jest.fn(),
     recordFollowUpAttempt: jest.fn(),
+    updateCustomerProfile: jest.fn(),
   };
 }
 

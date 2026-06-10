@@ -2,6 +2,7 @@ import { HttpModule } from '@nestjs/axios';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AcceptMetaWebhookUseCase } from '@/features/meta-messaging-webhook/application/use-cases/accept-meta-webhook.use-case';
+import { EnsureMetaUserProfileUseCase } from '@/features/meta-messaging-webhook/application/use-cases/ensure-meta-user-profile.use-case';
 import { ProcessIncomingMetaMessageUseCase } from '@/features/meta-messaging-webhook/application/use-cases/process-incoming-meta-message.use-case';
 import { ProcessDueFollowUpsUseCase } from '@/features/meta-messaging-webhook/application/use-cases/process-due-follow-ups.use-case';
 import { SimulateTerminalConversationUseCase } from '@/features/meta-messaging-webhook/application/use-cases/simulate-terminal-conversation.use-case';
@@ -17,6 +18,7 @@ import { MEDIA_CONTENT_READER } from '@/features/meta-messaging-webhook/domain/p
 import { MESSAGE_IDEMPOTENCY_STORE } from '@/features/meta-messaging-webhook/domain/ports/message-idempotency-store.port';
 import { LEAD_CUSTOM_FIELDS_EXTRACTOR } from '@/features/meta-messaging-webhook/domain/ports/lead-custom-fields-extractor.port';
 import { META_MESSENGER } from '@/features/meta-messaging-webhook/domain/ports/meta-messenger.port';
+import { META_USER_PROFILE } from '@/features/meta-messaging-webhook/domain/ports/meta-user-profile.port';
 import { NodeBackgroundTaskRunner } from '@/features/meta-messaging-webhook/infrastructure/background/node-background-task-runner';
 import { NodeFollowUpWorker } from '@/features/meta-messaging-webhook/infrastructure/background/node-follow-up-worker';
 import { GhlPassiveCrmAdapter } from '@/features/meta-messaging-webhook/infrastructure/ghl/ghl-passive-crm.adapter';
@@ -48,6 +50,7 @@ import { CompositeCrmSinkAdapter } from '@/features/meta-messaging-webhook/infra
   controllers: [MetaMessagingWebhookController],
   providers: [
     AcceptMetaWebhookUseCase,
+    EnsureMetaUserProfileUseCase,
     ProcessDueFollowUpsUseCase,
     ProcessIncomingMetaMessageUseCase,
     SimulateTerminalConversationUseCase,
@@ -80,6 +83,10 @@ import { CompositeCrmSinkAdapter } from '@/features/meta-messaging-webhook/infra
     },
     {
       provide: MEDIA_CONTENT_READER,
+      useExisting: MetaMessagingAdapter,
+    },
+    {
+      provide: META_USER_PROFILE,
       useExisting: MetaMessagingAdapter,
     },
     {

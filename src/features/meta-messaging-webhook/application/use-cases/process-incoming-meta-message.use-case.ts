@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DealerProfileResolver } from '@/features/meta-messaging-webhook/application/services/dealer-profile-resolver.service';
 import { MetaWebhookMessageExtractor } from '@/features/meta-messaging-webhook/application/services/meta-webhook-message-extractor.service';
+import { EnsureMetaUserProfileUseCase } from '@/features/meta-messaging-webhook/application/use-cases/ensure-meta-user-profile.use-case';
 import { ConversationMessage } from '@/features/meta-messaging-webhook/domain/entities/conversation-message.entity';
 import { IncomingMetaMessage } from '@/features/meta-messaging-webhook/domain/entities/incoming-meta-message.entity';
 import { LeadCustomFields } from '@/features/meta-messaging-webhook/domain/entities/lead-custom-fields.entity';
@@ -48,6 +49,7 @@ export class ProcessIncomingMetaMessageUseCase {
     private readonly idempotencyStore: MessageIdempotencyStore,
     @Inject(CONVERSATION_STATE_REPOSITORY)
     private readonly conversationState: ConversationStateRepository,
+    private readonly ensureMetaUserProfile: EnsureMetaUserProfileUseCase,
     @Inject(MEDIA_CONTENT_READER)
     private readonly mediaReader: MediaContentReaderPort,
     @Inject(MEDIA_ANALYZER)
@@ -111,6 +113,12 @@ export class ProcessIncomingMetaMessageUseCase {
 
     await this.conversationState.cancelFollowUp(message.channel, message.contactId, message.pageId);
     await this.conversationState.appendMessage(inboundMessage);
+    await this.ensureMetaUserProfile.execute({
+      state: currentState,
+      channel: message.channel,
+      pageId: message.pageId,
+      contactId: message.contactId,
+    });
 
     if (currentState?.qualificationStatus === 'completed' && !shouldReactivate) {
       const reply = buildCompletedLeadCourtesyReply(inboundText);
@@ -279,7 +287,21 @@ export class ProcessIncomingMetaMessageUseCase {
         return;
       }
 
-      await this.crmSink.updateCustomFields(contactPhone, leadFields);
+      const state = await this.conversationState.getState(
+        source.channel,
+        source.contactId,
+        source.pageId,
+      );
+
+      await this.crmSink.updateCustomFields(contactPhone, leadFields, {
+        channel: source.channel,
+        pageId: source.pageId,
+        contactId: source.contactId,
+        conversationKey: `${source.channel}:${source.pageId ?? 'local'}:${source.contactId}`,
+        customerProfile: state?.customerProfile,
+        qualificationCompletedAt: state?.qualificationCompletedAt,
+        messages: state?.messages ?? messages,
+      });
 
       for (const message of messages) {
         await this.crmSink.recordConversationMessage(message, contactPhone);

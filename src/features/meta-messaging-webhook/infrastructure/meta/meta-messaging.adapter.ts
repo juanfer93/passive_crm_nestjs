@@ -2,9 +2,11 @@ import { HttpService } from '@nestjs/axios';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MetaMessagingChannel } from '@/features/meta-messaging-webhook/domain/entities/conversation-message.entity';
+import { CustomerProfile } from '@/features/meta-messaging-webhook/domain/entities/customer-profile.entity';
 import { MediaContent } from '@/features/meta-messaging-webhook/domain/entities/media-content.entity';
 import { MediaContentReaderPort } from '@/features/meta-messaging-webhook/domain/ports/media-content-reader.port';
 import { MetaMessengerPort } from '@/features/meta-messaging-webhook/domain/ports/meta-messenger.port';
+import { MetaUserProfilePort } from '@/features/meta-messaging-webhook/domain/ports/meta-user-profile.port';
 
 interface MetaPageCredentials {
   pageId: string;
@@ -12,8 +14,17 @@ interface MetaPageCredentials {
   accessTokenKey: string;
 }
 
+interface MetaProfileResponse {
+  first_name?: string;
+  last_name?: string;
+  name?: string;
+  profile_pic?: string;
+}
+
 @Injectable()
-export class MetaMessagingAdapter implements MetaMessengerPort, MediaContentReaderPort {
+export class MetaMessagingAdapter
+  implements MetaMessengerPort, MediaContentReaderPort, MetaUserProfilePort
+{
   private readonly defaultMediaAllowedHostSuffixes = [
     'fbcdn.net',
     'facebook.com',
@@ -72,6 +83,35 @@ export class MetaMessagingAdapter implements MetaMessengerPort, MediaContentRead
         this.headerAsString(media.headers['content-type']) ??
         'application/octet-stream',
       bytes: Buffer.from(media.data),
+    };
+  }
+
+  async fetchProfile(pageId: string | undefined, metaUserId: string): Promise<CustomerProfile> {
+    const response = await this.http.axiosRef.get<MetaProfileResponse>(
+      `${this.graphUrl}/${encodeURIComponent(metaUserId)}`,
+      {
+        headers: this.authorizationHeadersForPage(pageId),
+        params: { fields: 'first_name,last_name,name,profile_pic' },
+        timeout: this.config.get<number>('META_PROFILE_REQUEST_TIMEOUT_MS', 8000),
+      },
+    );
+    const firstName = this.cleanProfileValue(response.data.first_name);
+    const lastName = this.cleanProfileValue(response.data.last_name);
+    const fullName = this.resolveFullName(response.data.name, firstName, lastName);
+
+    if (!firstName && !lastName && !fullName && !response.data.profile_pic) {
+      throw new Error('Meta profile response did not include usable profile fields.');
+    }
+
+    return {
+      firstName,
+      lastName,
+      fullName,
+      profilePictureUrl: this.cleanProfileValue(response.data.profile_pic),
+      source: 'meta',
+      fetchStatus: 'success',
+      fetchedAt: new Date(),
+      lastError: null,
     };
   }
 
@@ -215,5 +255,24 @@ export class MetaMessagingAdapter implements MetaMessengerPort, MediaContentRead
     }
 
     return undefined;
+  }
+
+  private cleanProfileValue(value?: string): string | null {
+    const trimmed = value?.trim();
+    return trimmed ? trimmed : null;
+  }
+
+  private resolveFullName(
+    value: string | undefined,
+    firstName: string | null,
+    lastName: string | null,
+  ): string | null {
+    const name = this.cleanProfileValue(value);
+
+    if (name) {
+      return name;
+    }
+
+    return [firstName, lastName].filter(Boolean).join(' ').trim() || null;
   }
 }

@@ -1,6 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { DealerProfileResolver } from '@/features/meta-messaging-webhook/application/services/dealer-profile-resolver.service';
 import { MetaWebhookMessageExtractor } from '@/features/meta-messaging-webhook/application/services/meta-webhook-message-extractor.service';
+import { EnsureMetaUserProfileUseCase } from '@/features/meta-messaging-webhook/application/use-cases/ensure-meta-user-profile.use-case';
 import { ProcessIncomingMetaMessageUseCase } from '@/features/meta-messaging-webhook/application/use-cases/process-incoming-meta-message.use-case';
 import { DealerProfile } from '@/features/meta-messaging-webhook/domain/entities/dealer-profile.entity';
 import { IncomingMetaMessage } from '@/features/meta-messaging-webhook/domain/entities/incoming-meta-message.entity';
@@ -46,6 +47,7 @@ describe('ProcessIncomingMetaMessageUseCase media security', () => {
       { resolve: jest.fn(() => dealerProfile) } as unknown as DealerProfileResolver,
       { reserve: jest.fn().mockResolvedValue(true) } as unknown as MessageIdempotencyStore,
       conversationState,
+      { execute: jest.fn() } as unknown as EnsureMetaUserProfileUseCase,
       mediaReader as unknown as MediaContentReaderPort,
       mediaAnalyzer as unknown as MediaAnalyzerPort,
       assistant as unknown as AssistantReplyGeneratorPort,
@@ -120,6 +122,7 @@ describe('ProcessIncomingMetaMessageUseCase media security', () => {
       { resolve: jest.fn(() => dealerProfile) } as unknown as DealerProfileResolver,
       { reserve: jest.fn().mockResolvedValue(true) } as unknown as MessageIdempotencyStore,
       conversationState,
+      { execute: jest.fn() } as unknown as EnsureMetaUserProfileUseCase,
       { getMediaContent: jest.fn() } as unknown as MediaContentReaderPort,
       { transcribeAudio: jest.fn(), describeImage: jest.fn() } as unknown as MediaAnalyzerPort,
       { generateReply: jest.fn() } as unknown as AssistantReplyGeneratorPort,
@@ -169,5 +172,6 @@ function conversationStateRepository(): jest.Mocked<ConversationStateRepository>
     cancelFollowUp: jest.fn(),
     findDueFollowUps: jest.fn(),
     recordFollowUpAttempt: jest.fn(),
+    updateCustomerProfile: jest.fn(),
   };
 }

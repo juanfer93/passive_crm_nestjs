@@ -4,6 +4,7 @@ import {
   ConversationMessage,
   MetaMessagingChannel,
 } from '@/features/meta-messaging-webhook/domain/entities/conversation-message.entity';
+import { CustomerProfile } from '@/features/meta-messaging-webhook/domain/entities/customer-profile.entity';
 import {
   FollowUpState,
   FollowUpStatus,
@@ -79,6 +80,9 @@ export class Conversation {
 
   @Prop({ type: [StoredConversationMessageSchema], default: [] })
   messages: StoredConversationMessage[];
+
+  @Prop({ type: SchemaTypes.Mixed })
+  customerProfile?: CustomerProfile;
 
   @Prop({ type: SchemaTypes.Mixed, default: {} })
   leadCustomFields: LeadCustomFields;

@@ -3,7 +3,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ConversationMessage } from '@/features/meta-messaging-webhook/domain/entities/conversation-message.entity';
 import { LeadCustomFields } from '@/features/meta-messaging-webhook/domain/entities/lead-custom-fields.entity';
-import { CrmSinkPort } from '@/features/meta-messaging-webhook/domain/ports/crm-sink.port';
+import {
+  CrmLeadSyncContext,
+  CrmSinkPort,
+} from '@/features/meta-messaging-webhook/domain/ports/crm-sink.port';
 
 @Injectable()
 export class GhlPassiveCrmAdapter implements CrmSinkPort {
@@ -41,7 +44,12 @@ export class GhlPassiveCrmAdapter implements CrmSinkPort {
     });
   }
 
-  async updateCustomFields(contactPhone: string, fields: LeadCustomFields): Promise<void> {
+  async updateCustomFields(
+    contactPhone: string,
+    fields: LeadCustomFields,
+    context?: CrmLeadSyncContext,
+  ): Promise<void> {
+    void context;
     await this.safeJsonWrite('update custom fields', async () => {
       const contactId = await this.resolveContactId(contactPhone);
       const customFields = Object.entries(fields)

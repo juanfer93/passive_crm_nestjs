@@ -22,6 +22,7 @@ describe('SimulateTerminalConversationUseCase', () => {
     cancelFollowUp: jest.fn(),
     findDueFollowUps: jest.fn(),
     recordFollowUpAttempt: jest.fn(),
+    updateCustomerProfile: jest.fn(),
   } satisfies jest.Mocked<ConversationStateRepository>;
   const assistant = {
     generateReply: jest.fn(),

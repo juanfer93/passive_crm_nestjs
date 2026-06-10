@@ -1,6 +1,7 @@
 import { ConversationMessage } from '@/features/meta-messaging-webhook/domain/entities/conversation-message.entity';
 import { MetaMessagingChannel } from '@/features/meta-messaging-webhook/domain/entities/conversation-message.entity';
 import { ConversationState } from '@/features/meta-messaging-webhook/domain/entities/conversation-state.entity';
+import { CustomerProfile } from '@/features/meta-messaging-webhook/domain/entities/customer-profile.entity';
 import { FollowUpState } from '@/features/meta-messaging-webhook/domain/entities/follow-up-state.entity';
 import {
   LeadCustomFields,
@@ -45,6 +46,12 @@ export interface ConversationStateRepository {
     channel: MetaMessagingChannel,
     contactId: string,
     followUp: FollowUpState,
+    pageId?: string,
+  ): Promise<void>;
+  updateCustomerProfile(
+    channel: MetaMessagingChannel,
+    contactId: string,
+    profile: CustomerProfile,
     pageId?: string,
   ): Promise<void>;
 }

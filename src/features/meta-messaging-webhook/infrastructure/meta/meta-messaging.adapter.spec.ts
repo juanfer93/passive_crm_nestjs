@@ -101,6 +101,44 @@ describe('MetaMessagingAdapter media security', () => {
       }),
     );
   });
+
+  it('fetches the Meta user profile with the access token configured for the incoming page id', async () => {
+    const get = jest.fn().mockResolvedValue({
+      data: {
+        first_name: 'Carlos',
+        last_name: 'Ramirez',
+        name: 'Carlos Ramirez',
+        profile_pic: 'https://example.com/profile.jpg',
+      },
+    });
+    const adapter = new MetaMessagingAdapter(
+      { axiosRef: { get } } as unknown as HttpService,
+      configService({
+        META_PAGE_1_ID: 'page-1',
+        META_PAGE_1_ACCESS_TOKEN: 'page-1-token',
+        META_PAGE_2_ID: 'page-2',
+        META_PAGE_2_ACCESS_TOKEN: 'page-2-token',
+      }),
+    );
+
+    const profile = await adapter.fetchProfile('page-2', 'psid-1');
+
+    expect(get).toHaveBeenCalledWith(
+      'https://graph.facebook.com/v21.0/psid-1',
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer page-2-token' },
+        params: { fields: 'first_name,last_name,name,profile_pic' },
+      }),
+    );
+    expect(profile).toEqual(
+      expect.objectContaining({
+        firstName: 'Carlos',
+        lastName: 'Ramirez',
+        fullName: 'Carlos Ramirez',
+        fetchStatus: 'success',
+      }),
+    );
+  });
 });
 
 function httpService(): HttpService {
