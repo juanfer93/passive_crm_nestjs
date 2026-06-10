@@ -31,6 +31,8 @@ import {
 import { OpenAiAssistantAdapter } from '@/features/meta-messaging-webhook/infrastructure/openai/openai-assistant.adapter';
 import { MetaMessagingWebhookController } from '@/features/meta-messaging-webhook/presentation/controllers/meta-messaging-webhook.controller';
 import { MetaSignatureGuard } from '@/features/meta-messaging-webhook/presentation/guards/meta-signature.guard';
+import { HlnCrmSinkAdapter } from '@/features/meta-messaging-webhook/infrastructure/hln/hln-crm-sink.adapter';
+import { CompositeCrmSinkAdapter } from '@/features/meta-messaging-webhook/infrastructure/hln/composite-crm-sink.adapter';
 
 @Module({
   imports: [
@@ -58,6 +60,8 @@ import { MetaSignatureGuard } from '@/features/meta-messaging-webhook/presentati
     GhlPassiveCrmAdapter,
     NodeBackgroundTaskRunner,
     NodeFollowUpWorker,
+    HlnCrmSinkAdapter,
+    CompositeCrmSinkAdapter,
     {
       provide: BACKGROUND_TASK_RUNNER,
       useExisting: NodeBackgroundTaskRunner,
@@ -92,7 +96,7 @@ import { MetaSignatureGuard } from '@/features/meta-messaging-webhook/presentati
     },
     {
       provide: CRM_SINK,
-      useExisting: GhlPassiveCrmAdapter,
+      useExisting: CompositeCrmSinkAdapter ,
     },
   ],
 })
