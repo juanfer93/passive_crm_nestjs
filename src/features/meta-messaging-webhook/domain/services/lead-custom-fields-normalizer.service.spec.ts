@@ -53,6 +53,21 @@ describe('lead custom fields normalizer', () => {
     ).toBe('SUV');
   });
 
+  it('uses the vehicle type as the interest when the customer does not name a specific model', () => {
+    expect(
+      normalizeLeadCustomFields(
+        JSON.stringify({
+          vehicle_type: 'Truck',
+        }),
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        vehicle_interest: 'Troca',
+        vehicle_type: 'Troca',
+      }),
+    );
+  });
+
   it('keeps non +1 country codes without plus sign', () => {
     expect(normalizePhone('+57 300 555 0101')).toBe('573005550101');
   });

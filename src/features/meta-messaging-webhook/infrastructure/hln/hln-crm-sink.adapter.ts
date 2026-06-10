@@ -22,17 +22,35 @@ export class HlnCrmSinkAdapter implements CrmSinkPort {
     context?: CrmLeadSyncContext,
   ): Promise<void> {
     if (!this.isEnabled) {
+      this.logger.warn({
+        event: 'hln_webhook_skipped',
+        reason: 'HLN_SYNC_ENABLED is not true',
+        phone: this.mask(contactPhone),
+        conversationKey: context?.conversationKey ?? null,
+      });
       return;
     }
 
-    if (!this.hasCompleteHlnPayload(fields, context)) {
+    const skipReasons = this.hlnSkipReasons(fields, context);
+
+    if (skipReasons.length > 0) {
+      this.logger.warn({
+        event: 'hln_webhook_skipped',
+        reasons: skipReasons,
+        phone: this.mask(contactPhone),
+        conversationKey: context?.conversationKey ?? null,
+      });
       return;
     }
 
     const webhookUrl = this.config.getOrThrow<string>('HLN_WEBHOOK_URL');
     const dealerId = this.config.getOrThrow<string>('HLN_DEALER_ID');
     const customerProfile = context?.customerProfile;
-    const fullName = this.fullName(customerProfile?.fullName, customerProfile?.firstName, customerProfile?.lastName);
+    const fullName = this.fullName(
+      customerProfile?.fullName,
+      customerProfile?.firstName,
+      customerProfile?.lastName,
+    );
     const lastInbound = context?.messages
       .slice()
       .reverse()
@@ -83,12 +101,30 @@ export class HlnCrmSinkAdapter implements CrmSinkPort {
       });
 
       if (!res.ok) {
-        this.logger.warn(`HLN webhook responded ${res.status} for ${this.mask(contactPhone)}`);
+        this.logger.warn({
+          event: 'hln_webhook_rejected',
+          status: res.status,
+          phone: this.mask(contactPhone),
+          conversationKey: context?.conversationKey ?? null,
+        });
       } else {
-        this.logger.log(`HLN webhook sent for ${this.mask(contactPhone)}, dealer ${dealerId}`);
+        this.logger.log({
+          event: 'hln_webhook_sent',
+          status: res.status,
+          phone: this.mask(contactPhone),
+          dealerId,
+          conversationKey: context?.conversationKey ?? null,
+        });
       }
     } catch (err: unknown) {
-      this.logger.error(`HLN webhook failed for ${this.mask(contactPhone)}`, err);
+      this.logger.error(
+        {
+          event: 'hln_webhook_failed',
+          phone: this.mask(contactPhone),
+          conversationKey: context?.conversationKey ?? null,
+        },
+        err,
+      );
     }
   }
 
@@ -106,19 +142,46 @@ export class HlnCrmSinkAdapter implements CrmSinkPort {
     return this.config.get<string>('HLN_SYNC_ENABLED') === 'true';
   }
 
-  private hasCompleteHlnPayload(
-    fields: LeadCustomFields,
-    context?: CrmLeadSyncContext,
-  ): boolean {
-    return Boolean(
-      hasCompletedLeadCustomFields(fields) &&
-        context?.customerProfile?.fetchStatus === 'success' &&
-        this.fullName(
-          context.customerProfile.fullName,
-          context.customerProfile.firstName,
-          context.customerProfile.lastName,
-        ),
-    );
+  private hlnSkipReasons(fields: LeadCustomFields, context?: CrmLeadSyncContext): string[] {
+    const reasons = this.missingLeadFieldReasons(fields);
+    const customerProfile = context?.customerProfile;
+
+    if (customerProfile?.fetchStatus !== 'success') {
+      reasons.push('customerProfile.fetchStatus is not success');
+    }
+
+    if (
+      !this.fullName(
+        customerProfile?.fullName,
+        customerProfile?.firstName,
+        customerProfile?.lastName,
+      )
+    ) {
+      reasons.push('customerProfile fullName is missing');
+    }
+
+    return reasons;
+  }
+
+  private missingLeadFieldReasons(fields: LeadCustomFields): string[] {
+    const missingFields = [
+      fields.purchase_timeline ? null : 'purchase_timeline',
+      fields.lead_temperature ? null : 'lead_temperature',
+      fields.vehicle_interest ? null : 'vehicle_interest',
+      fields.vehicle_type ? null : 'vehicle_type',
+      fields.down_payment ? null : 'down_payment',
+      fields.document_status !== undefined && fields.document_status !== null
+        ? null
+        : 'document_status',
+      fields.language ? null : 'language',
+      fields.phone ? null : 'phone',
+    ].filter((field): field is string => Boolean(field));
+
+    if (hasCompletedLeadCustomFields(fields)) {
+      return [];
+    }
+
+    return missingFields.map((field) => `leadCustomFields.${field} is missing`);
   }
 
   private summary(fields: LeadCustomFields): string {

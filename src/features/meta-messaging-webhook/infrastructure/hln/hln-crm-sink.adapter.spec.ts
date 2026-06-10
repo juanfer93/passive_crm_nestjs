@@ -8,7 +8,7 @@ describe('HlnCrmSinkAdapter', () => {
   });
 
   it('sends customer names from customerProfile instead of using the Meta user id as name', async () => {
-    jest.spyOn(Logger.prototype, 'log').mockImplementation();
+    const log = jest.spyOn(Logger.prototype, 'log').mockImplementation();
     const fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 200 });
     jest.spyOn(global, 'fetch').mockImplementation(fetchMock);
     const adapter = new HlnCrmSinkAdapter(
@@ -72,9 +72,16 @@ describe('HlnCrmSinkAdapter', () => {
       }),
     );
     expect(payload.customer.fullName).not.toBe('9334258666654026');
+    expect(log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'hln_webhook_sent',
+        conversationKey: 'messenger:page-1:9334258666654026',
+      }),
+    );
   });
 
   it('does not send to HLN until required fields and a successful customer name are available', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
     const fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 200 });
     jest.spyOn(global, 'fetch').mockImplementation(fetchMock);
     const adapter = new HlnCrmSinkAdapter(
@@ -132,6 +139,50 @@ describe('HlnCrmSinkAdapter', () => {
     );
 
     expect(fetchMock).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'hln_webhook_skipped',
+        reasons: expect.arrayContaining(['leadCustomFields.vehicle_interest is missing']),
+      }),
+    );
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'hln_webhook_skipped',
+        reasons: expect.arrayContaining([
+          'customerProfile.fetchStatus is not success',
+          'customerProfile fullName is missing',
+        ]),
+      }),
+    );
+  });
+
+  it('logs when HLN sync is disabled', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    const fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 200 });
+    jest.spyOn(global, 'fetch').mockImplementation(fetchMock);
+    const adapter = new HlnCrmSinkAdapter(
+      configService({
+        HLN_SYNC_ENABLED: 'false',
+        HLN_WEBHOOK_URL: 'https://hln.example/webhook',
+        HLN_DEALER_ID: '4',
+      }),
+    );
+
+    await adapter.updateCustomFields('3055555555', { phone: '3055555555' }, {
+      channel: 'messenger',
+      contactId: '9334258666654026',
+      conversationKey: 'messenger:page-1:9334258666654026',
+      messages: [],
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'hln_webhook_skipped',
+        reason: 'HLN_SYNC_ENABLED is not true',
+        conversationKey: 'messenger:page-1:9334258666654026',
+      }),
+    );
   });
 });
 

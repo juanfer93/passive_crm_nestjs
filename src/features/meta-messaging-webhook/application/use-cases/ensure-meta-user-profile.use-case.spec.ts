@@ -87,6 +87,44 @@ describe('EnsureMetaUserProfileUseCase', () => {
       'page-1',
     );
   });
+
+  it('stores Meta Graph API error details without exposing tokens', async () => {
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    const repository = repositoryMock();
+    const profiles = {
+      fetchProfile: jest.fn().mockRejectedValue({
+        response: {
+          data: {
+            error: {
+              message: 'Unsupported get request. Object does not exist or cannot be loaded.',
+              type: 'GraphMethodException',
+              code: 100,
+              error_subcode: 33,
+            },
+          },
+        },
+      }),
+    };
+    const useCase = new EnsureMetaUserProfileUseCase(repository, profiles);
+
+    await useCase.execute({
+      state: null,
+      channel: 'messenger',
+      pageId: 'page-1',
+      contactId: 'psid-1',
+    });
+
+    expect(repository.updateCustomerProfile).toHaveBeenCalledWith(
+      'messenger',
+      'psid-1',
+      expect.objectContaining({
+        fetchStatus: 'failed',
+        lastError:
+          'Meta Graph API error: Unsupported get request. Object does not exist or cannot be loaded. (type=GraphMethodException, code=100, subcode=33)',
+      }),
+      'page-1',
+    );
+  });
 });
 
 function repositoryMock(): jest.Mocked<ConversationStateRepository> {

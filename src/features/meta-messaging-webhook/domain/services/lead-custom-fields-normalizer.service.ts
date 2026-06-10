@@ -9,12 +9,13 @@ export function normalizeLeadCustomFields(content?: string | null): LeadCustomFi
     const parsed = JSON.parse(content) as Record<string, unknown>;
     const purchaseTimeline = stringOrUndefined(parsed.purchase_timeline);
     const vehicleInterest = stringOrUndefined(parsed.vehicle_interest);
+    const vehicleType = normalizeVehicleType(parsed.vehicle_type, vehicleInterest);
 
     return {
-      vehicle_interest: vehicleInterest,
+      vehicle_interest: vehicleInterest ?? vehicleType,
       purchase_timeline: purchaseTimeline,
       lead_temperature: normalizeLeadTemperature(parsed.lead_temperature, purchaseTimeline),
-      vehicle_type: normalizeVehicleType(parsed.vehicle_type, vehicleInterest),
+      vehicle_type: vehicleType,
       down_payment: stringOrUndefined(parsed.down_payment),
       document_status: normalizeDocumentStatus(parsed.document_status),
       phone: normalizePhone(parsed.phone),
