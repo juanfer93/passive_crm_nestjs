@@ -17,7 +17,6 @@ interface MetaPageCredentials {
 interface MetaProfileResponse {
   first_name?: string;
   last_name?: string;
-  name?: string;
   profile_pic?: string;
 }
 
@@ -91,13 +90,13 @@ export class MetaMessagingAdapter
       `${this.graphUrl}/${encodeURIComponent(metaUserId)}`,
       {
         headers: this.authorizationHeadersForPage(pageId),
-        params: { fields: 'first_name,last_name,name,profile_pic' },
+        params: { fields: 'first_name,last_name,profile_pic' },
         timeout: this.config.get<number>('META_PROFILE_REQUEST_TIMEOUT_MS', 8000),
       },
     );
     const firstName = this.cleanProfileValue(response.data.first_name);
     const lastName = this.cleanProfileValue(response.data.last_name);
-    const fullName = this.resolveFullName(response.data.name, firstName, lastName);
+    const fullName = this.resolveFullName(firstName, lastName);
 
     if (!firstName && !lastName && !fullName && !response.data.profile_pic) {
       throw new Error('Meta profile response did not include usable profile fields.');
@@ -262,17 +261,7 @@ export class MetaMessagingAdapter
     return trimmed ? trimmed : null;
   }
 
-  private resolveFullName(
-    value: string | undefined,
-    firstName: string | null,
-    lastName: string | null,
-  ): string | null {
-    const name = this.cleanProfileValue(value);
-
-    if (name) {
-      return name;
-    }
-
+  private resolveFullName(firstName: string | null, lastName: string | null): string | null {
     return [firstName, lastName].filter(Boolean).join(' ').trim() || null;
   }
 }

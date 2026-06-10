@@ -107,7 +107,6 @@ describe('MetaMessagingAdapter media security', () => {
       data: {
         first_name: 'Carlos',
         last_name: 'Ramirez',
-        name: 'Carlos Ramirez',
         profile_pic: 'https://example.com/profile.jpg',
       },
     });
@@ -127,7 +126,7 @@ describe('MetaMessagingAdapter media security', () => {
       'https://graph.facebook.com/v21.0/psid-1',
       expect.objectContaining({
         headers: { Authorization: 'Bearer page-2-token' },
-        params: { fields: 'first_name,last_name,name,profile_pic' },
+        params: { fields: 'first_name,last_name,profile_pic' },
       }),
     );
     expect(profile).toEqual(
