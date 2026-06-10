@@ -41,6 +41,7 @@ describe('HlnCrmSinkAdapter', () => {
           firstName: 'Carlos',
           lastName: 'Ramirez',
           fullName: 'Carlos Ramirez',
+          fetchStatus: 'success',
         },
         messages: [
           {
@@ -71,6 +72,66 @@ describe('HlnCrmSinkAdapter', () => {
       }),
     );
     expect(payload.customer.fullName).not.toBe('9334258666654026');
+  });
+
+  it('does not send to HLN until required fields and a successful customer name are available', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 200 });
+    jest.spyOn(global, 'fetch').mockImplementation(fetchMock);
+    const adapter = new HlnCrmSinkAdapter(
+      configService({
+        HLN_SYNC_ENABLED: 'true',
+        HLN_WEBHOOK_URL: 'https://hln.example/webhook',
+        HLN_DEALER_ID: '4',
+      }),
+    );
+
+    await adapter.updateCustomFields(
+      '3055555555',
+      {
+        phone: '3055555555',
+        language: 'es',
+        purchase_timeline: 'esta semana',
+        lead_temperature: 'hot',
+        vehicle_type: 'Sedan',
+        down_payment: '2000',
+        document_status: 'confirmed',
+      },
+      {
+        channel: 'messenger',
+        contactId: '9334258666654026',
+        conversationKey: 'messenger:page-1:9334258666654026',
+        customerProfile: {
+          firstName: 'Carlos',
+          fullName: 'Carlos',
+          fetchStatus: 'success',
+        },
+        messages: [],
+      },
+    );
+    await adapter.updateCustomFields(
+      '3055555555',
+      {
+        phone: '3055555555',
+        language: 'es',
+        purchase_timeline: 'esta semana',
+        lead_temperature: 'hot',
+        vehicle_interest: 'Toyota Corolla',
+        vehicle_type: 'Sedan',
+        down_payment: '2000',
+        document_status: 'confirmed',
+      },
+      {
+        channel: 'messenger',
+        contactId: '9334258666654026',
+        conversationKey: 'messenger:page-1:9334258666654026',
+        customerProfile: {
+          fetchStatus: 'failed',
+        },
+        messages: [],
+      },
+    );
+
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 

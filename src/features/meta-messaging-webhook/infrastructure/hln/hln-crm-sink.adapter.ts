@@ -25,13 +25,14 @@ export class HlnCrmSinkAdapter implements CrmSinkPort {
       return;
     }
 
-    if (!hasCompletedLeadCustomFields(fields)) {
+    if (!this.hasCompleteHlnPayload(fields, context)) {
       return;
     }
 
     const webhookUrl = this.config.getOrThrow<string>('HLN_WEBHOOK_URL');
     const dealerId = this.config.getOrThrow<string>('HLN_DEALER_ID');
     const customerProfile = context?.customerProfile;
+    const fullName = this.fullName(customerProfile?.fullName, customerProfile?.firstName, customerProfile?.lastName);
     const lastInbound = context?.messages
       .slice()
       .reverse()
@@ -46,7 +47,7 @@ export class HlnCrmSinkAdapter implements CrmSinkPort {
       customer: {
         firstName: customerProfile?.firstName ?? null,
         lastName: customerProfile?.lastName ?? null,
-        fullName: customerProfile?.fullName ?? null,
+        fullName,
         phone: fields.phone ?? contactPhone,
         email: fields.email ?? null,
         language: fields.language ?? null,
@@ -105,6 +106,21 @@ export class HlnCrmSinkAdapter implements CrmSinkPort {
     return this.config.get<string>('HLN_SYNC_ENABLED') === 'true';
   }
 
+  private hasCompleteHlnPayload(
+    fields: LeadCustomFields,
+    context?: CrmLeadSyncContext,
+  ): boolean {
+    return Boolean(
+      hasCompletedLeadCustomFields(fields) &&
+        context?.customerProfile?.fetchStatus === 'success' &&
+        this.fullName(
+          context.customerProfile.fullName,
+          context.customerProfile.firstName,
+          context.customerProfile.lastName,
+        ),
+    );
+  }
+
   private summary(fields: LeadCustomFields): string {
     return [
       `Cliente busca ${fields.vehicle_interest ?? fields.vehicle_type ?? 'un vehiculo'}`,
@@ -130,5 +146,14 @@ export class HlnCrmSinkAdapter implements CrmSinkPort {
 
   private mask(value: string): string {
     return value.length <= 4 ? '****' : `${value.slice(0, 2)}***${value.slice(-2)}`;
+  }
+
+  private fullName(
+    fullName?: string | null,
+    firstName?: string | null,
+    lastName?: string | null,
+  ): string | null {
+    const resolved = fullName ?? [firstName, lastName].filter(Boolean).join(' ').trim();
+    return resolved || null;
   }
 }

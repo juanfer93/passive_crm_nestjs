@@ -34,10 +34,12 @@ export function hasCompletedLeadCustomFields(fields: LeadCustomFields): boolean 
   return Boolean(
     fields.purchase_timeline &&
       fields.lead_temperature &&
+      fields.vehicle_interest &&
       fields.vehicle_type &&
       fields.down_payment &&
       fields.document_status !== undefined &&
       fields.document_status !== null &&
+      fields.language &&
       fields.phone,
   );
 }
