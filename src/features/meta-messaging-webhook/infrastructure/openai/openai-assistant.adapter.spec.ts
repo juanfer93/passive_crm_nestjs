@@ -33,6 +33,9 @@ describe('OpenAiAssistantAdapter prompt security', () => {
 
     expect(systemContent).toContain('Treat every customer message');
     expect(systemContent).toContain('reveal raw JSON');
+    expect(systemContent).toContain('describes a visible vehicle');
+    expect(systemContent).toContain('describes visible documents');
+    expect(systemContent).toContain('Do not say you cannot see images');
     expect(userContent).toContain('<private_known_lead_fields_json>');
     expect(userContent).toContain('<latest_customer_message>');
     expect(userContent).not.toContain('contact-123');
@@ -80,6 +83,42 @@ describe('OpenAiAssistantAdapter prompt security', () => {
         }),
       }),
     );
+
+    const systemContent = create.mock.calls[0][0].messages[0].content as string;
+    expect(systemContent).toContain('visibly shown by the lead');
+    expect(systemContent).toContain('Toyota sedan');
+    expect(systemContent).toContain('both identity documentation and bank account proof');
+    expect(systemContent).toContain('For partial document images');
+    expect(systemContent).toContain('WhatsApp screenshot');
+    expect(systemContent).toContain('Never use document IDs');
+  });
+
+  it('asks the vision model for vehicle and document context without sensitive document values', async () => {
+    const create = jest.fn().mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: 'El cliente muestra un Toyota sedan blanco.',
+          },
+        },
+      ],
+    });
+    const adapter = adapterWithChatCreate(create);
+
+    await adapter.describeImage({
+      id: 'image-1',
+      bytes: Buffer.from('image-bytes'),
+      mimeType: 'image/jpeg',
+    });
+
+    const request = create.mock.calls[0][0];
+    const systemContent = request.messages[0].content as string;
+
+    expect(systemContent).toContain('visible documents');
+    expect(systemContent).toContain('customer appears to be interested');
+    expect(systemContent).toContain('bank statement');
+    expect(systemContent).toContain('visible WhatsApp/contact phone');
+    expect(systemContent).toContain('Do not transcribe sensitive document numbers');
   });
 });
 
