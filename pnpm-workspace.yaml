@@ -1,3 +1,4 @@
 allowBuilds:
   '@nestjs/core': false
   ngrok: false
+  puppeteer: true
