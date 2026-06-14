@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { MetaMessagingWebhookModule } from '@/features/meta-messaging-webhook/meta-messaging-webhook.module';
 import { WhatsappWebModule } from '@/features/whatsapp-web/whatsapp-web.module';
+import { SofiaEngineModule } from '@/features/sofia-engine/sofia-engine.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { WhatsappWebModule } from '@/features/whatsapp-web/whatsapp-web.module';
       }),
     }),
     MetaMessagingWebhookModule,
+    SofiaEngineModule,
     WhatsappWebModule,
   ],
 })
