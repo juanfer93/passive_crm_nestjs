@@ -33,7 +33,16 @@ export class WhatsappWebClientService implements OnModuleInit, OnModuleDestroy {
     });
 
     this.setupListeners();
-    await this.client.initialize();
+    try {
+      await this.client.initialize();
+    } catch (error) {
+      this.isReady = false;
+      this.logger.error(
+        `WhatsApp Web initialization failed; the rest of the application will continue: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
   }
 
   async onModuleDestroy() {
