@@ -39,6 +39,7 @@ import {
   MetaMessengerPort,
 } from '@/features/meta-messaging-webhook/domain/ports/meta-messenger.port';
 import { MetaWebhookPayload } from '@/features/meta-messaging-webhook/domain/types/meta-webhook-payload.type';
+import { SofiaWebhookBridgeService } from '@/features/sofia-engine/application/services/sofia-webhook-bridge.service';
 
 @Injectable()
 export class ProcessIncomingMetaMessageUseCase {
@@ -64,6 +65,7 @@ export class ProcessIncomingMetaMessageUseCase {
     private readonly crmSink: CrmSinkPort,
     @Inject(BACKGROUND_TASK_RUNNER)
     private readonly background: BackgroundTaskRunnerPort,
+    private readonly sofiaWebhookBridge: SofiaWebhookBridgeService,
     private readonly config: ConfigService,
   ) {}
 
@@ -124,6 +126,7 @@ export class ProcessIncomingMetaMessageUseCase {
       const reply = buildCompletedLeadCourtesyReply(inboundText);
 
       if (!reply) {
+        this.triggerSofia(message);
         return;
       }
 
@@ -144,6 +147,7 @@ export class ProcessIncomingMetaMessageUseCase {
         occurredAt: new Date(),
       });
 
+      this.triggerSofia(message);
       return;
     }
 
@@ -215,6 +219,7 @@ export class ProcessIncomingMetaMessageUseCase {
     }
 
     this.syncToPassiveCrm(message, leadQualification.customFields, inboundMessage, outboundMessage);
+    this.triggerSofia(message);
   }
 
   private async resolveMessageText(message: IncomingMetaMessage): Promise<string> {
@@ -306,6 +311,13 @@ export class ProcessIncomingMetaMessageUseCase {
       for (const message of messages) {
         await this.crmSink.recordConversationMessage(message, contactPhone);
       }
+    });
+  }
+
+  private triggerSofia(source: IncomingMetaMessage): void {
+    this.background.run('sofia-webhook-trigger', async () => {
+      const leadId = `${source.channel}:${source.pageId ?? 'local'}:${source.contactId}`;
+      await this.sofiaWebhookBridge.handleIncomingLead(leadId);
     });
   }
 }

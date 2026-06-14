@@ -2,6 +2,8 @@
 
 Backend NestJS para Meta Messenger e Instagram Messaging con arquitectura Feature-First + Onion Architecture.
 
+Tambien incluye Sofia Agent Engine como motor interno centralizado para contexto, recomendaciones, prompts, acciones asistidas, actividad y aprendizaje. La inteligencia y las reglas viven en este backend; Meta, WhatsApp Web, Twilio y Retell son proveedores de ejecucion opcionales.
+
 ## Principios
 
 - `Domain` contiene entidades, tipos y puertos puros.
@@ -23,6 +25,7 @@ Backend NestJS para Meta Messenger e Instagram Messaging con arquitectura Featur
 8. El estado conversacional se persiste en MongoDB usando `channel + pageId + senderId` como identidad del chat, para que el mismo cliente pueda escribir a paginas distintas sin mezclar historiales.
 9. OpenAI consulta el historial reciente guardado en MongoDB y extrae custom fields de lead.
 10. La escritura JSON hacia el destino GHL ocurre de forma secundaria y no bloqueante.
+11. Cada mensaje procesado por el webhook dispara en background una actualizacion de contexto y recomendacion de Sofia, sin cambiar ni bloquear la respuesta actual de Meta.
 
 ## Custom fields enviados a GHL
 
@@ -139,6 +142,58 @@ Webhook de Meta Messenger/Instagram:
 GET  /webhooks/meta/messaging
 POST /webhooks/meta/messaging
 ```
+
+## Sofia Agent Engine
+
+Endpoints:
+
+```text
+GET  /api/sofia/context/:leadId
+GET  /api/sofia/recommendation/:leadId
+POST /api/sofia/execute
+GET  /api/sofia/learning/:dealerId
+GET  /api/sofia/activity/:leadId
+```
+
+El `leadId` canonico usa `channel:pageId:contactId`, por ejemplo `messenger:meta-page-1:12345`. Tambien se puede consultar por `contactId`; cuando se usa el ID canonico en una URL debe enviarse URL-encoded.
+
+Todas las rutas requieren alcance de dealer y permiso del usuario:
+
+```text
+x-user-id: viva-user-id
+x-dealer-id: offlease-fredericksburg
+x-user-permissions: sofia:read,sofia:execute
+```
+
+Si se configura `SOFIA_INTERNAL_API_KEY`, un servicio interno puede usar `x-internal-api-key`, pero aun debe enviar `x-dealer-id`.
+
+Ejemplo de accion asistida:
+
+```json
+{
+  "leadId": "messenger:meta-page-1:12345",
+  "actionType": "request_documents",
+  "channel": "messenger",
+  "approvedByUser": true,
+  "payload": {
+    "message": "Para avanzar, ¿cuentas con identificacion vigente y comprobante bancario?"
+  }
+}
+```
+
+Las acciones de contacto requieren un `payload.message` editable. Por defecto no se ejecuta nada sin `approvedByUser=true`. Las llamadas Retell requieren ademas `AUTO_RETELL_CALLS_ENABLED=true`; la autonomia global solo se habilita con `SOFIA_AUTONOMOUS_ENABLED=true`.
+
+Sofia respeta opt-out/STOP, numero equivocado, horario comercial y limite de acciones por lead. Las acciones, recomendaciones y eventos se guardan en `sofia_actions`, `sofia_recommendations` y `activities`.
+
+Proveedores actuales:
+
+- Messenger/Instagram: API de Meta existente.
+- WhatsApp: cliente WhatsApp Web existente; si Chrome o la sesion no estan disponibles, queda deshabilitado sin detener el resto de la app.
+- SMS: Twilio cuando sus credenciales estan configuradas.
+- Llamadas: Retell cuando sus credenciales y el interruptor explicito estan configurados.
+- Tareas/estado: registro interno VIVA en Sofia Actions.
+
+Este repositorio no contiene el frontend VIVA. Los paneles Sofia Thinking, Recommended Action, Buyer DNA, Sofia Is Learning, Sofia Live Operations, Deploy Sofia y Work Mode deben consumir estos endpoints desde el repositorio frontend correspondiente, sin datos mock.
 
 ## Verificacion
 

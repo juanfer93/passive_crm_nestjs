@@ -13,6 +13,7 @@ const result = spawnSync(
       SIMULATE_CHAT_CHANNEL: args.channel,
       SIMULATE_CHAT_CONTACT: args.contact,
       SIMULATE_CHAT_PROFILE: args.profile,
+      SIMULATE_CHAT_PAGE_ID: args.page,
     }),
     stdio: 'inherit',
   },
@@ -25,6 +26,7 @@ function parseArgs(argv) {
     channel: readArg(argv, 'channel'),
     contact: readArg(argv, 'contact'),
     profile: readArg(argv, 'profile'),
+    page: readArg(argv, 'page'),
   };
 }
 

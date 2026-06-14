@@ -35,6 +35,7 @@ import { MetaMessagingWebhookController } from '@/features/meta-messaging-webhoo
 import { MetaSignatureGuard } from '@/features/meta-messaging-webhook/presentation/guards/meta-signature.guard';
 import { HlnCrmSinkAdapter } from '@/features/meta-messaging-webhook/infrastructure/hln/hln-crm-sink.adapter';
 import { CompositeCrmSinkAdapter } from '@/features/meta-messaging-webhook/infrastructure/hln/composite-crm-sink.adapter';
+import { SofiaEngineModule } from '@/features/sofia-engine/sofia-engine.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { CompositeCrmSinkAdapter } from '@/features/meta-messaging-webhook/infra
       timeout: 8000,
       maxRedirects: 3,
     }),
+    SofiaEngineModule,
     MongooseModule.forFeature([
       { name: Conversation.name, schema: ConversationSchema },
       { name: MessageReceipt.name, schema: MessageReceiptSchema },

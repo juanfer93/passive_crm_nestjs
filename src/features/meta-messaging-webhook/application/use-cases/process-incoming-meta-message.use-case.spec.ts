@@ -15,6 +15,7 @@ import { MediaContentReaderPort } from '@/features/meta-messaging-webhook/domain
 import { MessageIdempotencyStore } from '@/features/meta-messaging-webhook/domain/ports/message-idempotency-store.port';
 import { MetaMessengerPort } from '@/features/meta-messaging-webhook/domain/ports/meta-messenger.port';
 import { MetaWebhookPayload } from '@/features/meta-messaging-webhook/domain/types/meta-webhook-payload.type';
+import { SofiaWebhookBridgeService } from '@/features/sofia-engine/application/services/sofia-webhook-bridge.service';
 
 describe('ProcessIncomingMetaMessageUseCase media security', () => {
   it('does not send non-audio media content to OpenAI transcription', async () => {
@@ -42,6 +43,8 @@ describe('ProcessIncomingMetaMessageUseCase media security', () => {
     const assistant = { generateReply: jest.fn().mockResolvedValue('Reply') };
     const messenger = { sendTextMessage: jest.fn() };
     const conversationState = conversationStateRepository();
+    const background = { run: jest.fn() };
+    const sofiaBridge = { handleIncomingLead: jest.fn() };
     const useCase = new ProcessIncomingMetaMessageUseCase(
       extractor as unknown as MetaWebhookMessageExtractor,
       { resolve: jest.fn(() => dealerProfile) } as unknown as DealerProfileResolver,
@@ -57,7 +60,8 @@ describe('ProcessIncomingMetaMessageUseCase media security', () => {
         updateCustomFields: jest.fn(),
         recordConversationMessage: jest.fn(),
       } as unknown as CrmSinkPort,
-      { run: jest.fn() } as unknown as BackgroundTaskRunnerPort,
+      background as unknown as BackgroundTaskRunnerPort,
+      sofiaBridge as unknown as SofiaWebhookBridgeService,
       { get: (_key: string, defaultValue?: unknown) => defaultValue } as unknown as ConfigService,
     );
 
@@ -91,6 +95,7 @@ describe('ProcessIncomingMetaMessageUseCase media security', () => {
       }),
       'page-1',
     );
+    expect(background.run).toHaveBeenCalledWith('sofia-webhook-trigger', expect.any(Function));
   });
 
   it('does not schedule a follow-up when custom fields complete the lead', async () => {
@@ -117,6 +122,7 @@ describe('ProcessIncomingMetaMessageUseCase media security', () => {
       completedAt: new Date('2026-01-01T00:00:00.000Z'),
     });
     const messenger = { sendTextMessage: jest.fn() };
+    const background = { run: jest.fn() };
     const useCase = new ProcessIncomingMetaMessageUseCase(
       { extract: jest.fn(() => [message]) } as unknown as MetaWebhookMessageExtractor,
       { resolve: jest.fn(() => dealerProfile) } as unknown as DealerProfileResolver,
@@ -132,7 +138,8 @@ describe('ProcessIncomingMetaMessageUseCase media security', () => {
         updateCustomFields: jest.fn(),
         recordConversationMessage: jest.fn(),
       } as unknown as CrmSinkPort,
-      { run: jest.fn() } as unknown as BackgroundTaskRunnerPort,
+      background as unknown as BackgroundTaskRunnerPort,
+      { handleIncomingLead: jest.fn() } as unknown as SofiaWebhookBridgeService,
       { get: (_key: string, defaultValue?: unknown) => defaultValue } as unknown as ConfigService,
     );
 
@@ -150,6 +157,7 @@ describe('ProcessIncomingMetaMessageUseCase media security', () => {
       'page-1',
     );
     expect(conversationState.scheduleFollowUp).not.toHaveBeenCalled();
+    expect(background.run).toHaveBeenCalledWith('sofia-webhook-trigger', expect.any(Function));
   });
 });
 
