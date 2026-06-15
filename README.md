@@ -229,7 +229,7 @@ pnpm start:dev
 
 ## Simular chat en terminal
 
-El simulador usa MongoDB para guardar historial/custom fields y OpenAI para responder, pero no llama a Meta, GHL ni VIVA.
+El simulador usa MongoDB para guardar historial/custom fields y OpenAI para responder, pero no llama a Meta ni a GHL. VIVA solo recibe eventos si configuras `VIVA_SOFIA_EVENT_URL` o `VIVA_API_BASE_URL`.
 
 ```bash
 pnpm simulate:chat -- --profile offlease-fredericksburg --contact test-lead-1
