@@ -16,12 +16,14 @@ import {
 
 export type ConversationDocument = HydratedDocument<Conversation>;
 
+const messagingChannels = ['messenger', 'instagram', 'whatsapp'] as const;
+
 @Schema({ _id: false })
 export class StoredConversationMessage implements ConversationMessage {
   @Prop({ required: true })
   id: string;
 
-  @Prop({ required: true, enum: ['messenger', 'instagram'] })
+  @Prop({ required: true, enum: messagingChannels })
   channel: MetaMessagingChannel;
 
   @Prop()
@@ -69,7 +71,7 @@ export class Conversation {
   @Prop({ required: true, unique: true, index: true })
   conversationKey: string;
 
-  @Prop({ required: true, enum: ['messenger', 'instagram'] })
+  @Prop({ required: true, enum: messagingChannels })
   channel: MetaMessagingChannel;
 
   @Prop()
