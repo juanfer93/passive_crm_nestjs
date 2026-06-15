@@ -1,4 +1,3 @@
-import { ConfigService } from '@nestjs/config';
 import { DealerProfileResolver } from '@/features/meta-messaging-webhook/application/services/dealer-profile-resolver.service';
 import { MetaWebhookMessageExtractor } from '@/features/meta-messaging-webhook/application/services/meta-webhook-message-extractor.service';
 import { EnsureMetaUserProfileUseCase } from '@/features/meta-messaging-webhook/application/use-cases/ensure-meta-user-profile.use-case';
@@ -14,8 +13,8 @@ import { MediaAnalyzerPort } from '@/features/meta-messaging-webhook/domain/port
 import { MediaContentReaderPort } from '@/features/meta-messaging-webhook/domain/ports/media-content-reader.port';
 import { MessageIdempotencyStore } from '@/features/meta-messaging-webhook/domain/ports/message-idempotency-store.port';
 import { MetaMessengerPort } from '@/features/meta-messaging-webhook/domain/ports/meta-messenger.port';
+import { VivaSofiaEventPublisherPort } from '@/features/meta-messaging-webhook/domain/ports/viva-sofia-event-publisher.port';
 import { MetaWebhookPayload } from '@/features/meta-messaging-webhook/domain/types/meta-webhook-payload.type';
-import { SofiaWebhookBridgeService } from '@/features/sofia-engine/application/services/sofia-webhook-bridge.service';
 
 describe('ProcessIncomingMetaMessageUseCase media security', () => {
   it('does not send non-audio media content to OpenAI transcription', async () => {
@@ -44,7 +43,7 @@ describe('ProcessIncomingMetaMessageUseCase media security', () => {
     const messenger = { sendTextMessage: jest.fn() };
     const conversationState = conversationStateRepository();
     const background = { run: jest.fn() };
-    const sofiaBridge = { handleIncomingLead: jest.fn() };
+    const vivaEvents = { publish: jest.fn() };
     const useCase = new ProcessIncomingMetaMessageUseCase(
       extractor as unknown as MetaWebhookMessageExtractor,
       { resolve: jest.fn(() => dealerProfile) } as unknown as DealerProfileResolver,
@@ -61,8 +60,7 @@ describe('ProcessIncomingMetaMessageUseCase media security', () => {
         recordConversationMessage: jest.fn(),
       } as unknown as CrmSinkPort,
       background as unknown as BackgroundTaskRunnerPort,
-      sofiaBridge as unknown as SofiaWebhookBridgeService,
-      { get: (_key: string, defaultValue?: unknown) => defaultValue } as unknown as ConfigService,
+      vivaEvents as unknown as VivaSofiaEventPublisherPort,
     );
 
     await useCase.execute({} as MetaWebhookPayload);
@@ -86,16 +84,9 @@ describe('ProcessIncomingMetaMessageUseCase media security', () => {
       'contact-1',
       'page-1',
     );
-    expect(conversationState.scheduleFollowUp).toHaveBeenCalledWith(
-      'messenger',
-      'contact-1',
-      expect.objectContaining({
-        status: 'active',
-        attempts: 0,
-      }),
-      'page-1',
-    );
-    expect(background.run).toHaveBeenCalledWith('sofia-webhook-trigger', expect.any(Function));
+    expect(conversationState.scheduleFollowUp).not.toHaveBeenCalled();
+    expect(background.run).toHaveBeenCalledWith('sync-ghl-passive-crm', expect.any(Function));
+    expect(background.run).toHaveBeenCalledWith('viva-sofia-event-publisher', expect.any(Function));
   });
 
   it('does not schedule a follow-up when custom fields complete the lead', async () => {
@@ -123,6 +114,7 @@ describe('ProcessIncomingMetaMessageUseCase media security', () => {
     });
     const messenger = { sendTextMessage: jest.fn() };
     const background = { run: jest.fn() };
+    const vivaEvents = { publish: jest.fn() };
     const useCase = new ProcessIncomingMetaMessageUseCase(
       { extract: jest.fn(() => [message]) } as unknown as MetaWebhookMessageExtractor,
       { resolve: jest.fn(() => dealerProfile) } as unknown as DealerProfileResolver,
@@ -139,8 +131,7 @@ describe('ProcessIncomingMetaMessageUseCase media security', () => {
         recordConversationMessage: jest.fn(),
       } as unknown as CrmSinkPort,
       background as unknown as BackgroundTaskRunnerPort,
-      { handleIncomingLead: jest.fn() } as unknown as SofiaWebhookBridgeService,
-      { get: (_key: string, defaultValue?: unknown) => defaultValue } as unknown as ConfigService,
+      vivaEvents as unknown as VivaSofiaEventPublisherPort,
     );
 
     await useCase.execute({} as MetaWebhookPayload);
@@ -157,7 +148,8 @@ describe('ProcessIncomingMetaMessageUseCase media security', () => {
       'page-1',
     );
     expect(conversationState.scheduleFollowUp).not.toHaveBeenCalled();
-    expect(background.run).toHaveBeenCalledWith('sofia-webhook-trigger', expect.any(Function));
+    expect(background.run).toHaveBeenCalledWith('sync-ghl-passive-crm', expect.any(Function));
+    expect(background.run).toHaveBeenCalledWith('viva-sofia-event-publisher', expect.any(Function));
   });
 });
 
