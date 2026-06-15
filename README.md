@@ -293,6 +293,23 @@ Este backend NestJS no monta endpoints internos `/api/sofia/context`, `/api/sofi
 
 NestJS solo alimenta a Sofia Brain con contexto enriquecido mediante eventos HTTP. La decision operativa, las llamadas, las citas, los documentos, las tareas, la reactivacion y la cola Sofia pertenecen a VIVA.
 
+## Pendiente del flujo VIVA/NestJS
+
+Estas piezas quedan pendientes para completar el flujo end-to-end y deben validarse despues de correr `pnpm build`, `pnpm lint` y `pnpm test`:
+
+1. Configurar en ambiente la URL real de VIVA: `VIVA_SOFIA_EVENT_URL` o `VIVA_API_BASE_URL`.
+2. Configurar `VIVA_INTERNAL_API_KEY` si el endpoint `POST /api/sofia/event` de VIVA exige autenticacion interna.
+3. Confirmar que VIVA acepte el payload actual con `event`, `leadId`, `ghlContactId`, `buyerDNA`, `intent` y `conversation`.
+4. Definir si VIVA necesita un `ghlContactId` real en el payload. Actualmente NestJS envia `ghlContactId: null` porque el adaptador GHL resuelve el contacto internamente por telefono y no expone ese ID al publisher de VIVA.
+5. Conectar `appointment_created` cuando exista en NestJS un flujo real que cree citas o reciba confirmacion conversacional de una cita creada.
+6. Conectar `call_completed` cuando exista en NestJS un hook real de llamadas completadas o cuando Retell/VIVA reporte ese evento al backend conversacional.
+7. Decidir si `documentation_received` debe dispararse solo por `document_status` o tambien por media/documentos adjuntos detectados por Meta/WhatsApp.
+8. Validar el scoring de `purchaseIntent` con data real de leads. El scoring actual es heuristico y debe calibrarse con Sofia/VIVA.
+9. Revisar si se eliminan definitivamente los archivos legacy de `src/features/sofia-engine/`. Por ahora no estan montados en `AppModule`, pero siguen en el repo para evitar un borrado agresivo antes de validar build/lint/test.
+10. Revisar si se eliminan definitivamente `ProcessDueFollowUpsUseCase` y `NodeFollowUpWorker`. Por ahora no estan registrados en el modulo principal, pero siguen en el repo para evitar romper imports o tests existentes hasta validar localmente.
+11. Agregar tests unitarios para `viva-sofia-event-factory.service.ts` y `viva-sofia-event.adapter.ts` despues de confirmar el contrato final de VIVA.
+12. Agregar un test de integracion del flujo `ProcessIncomingMetaMessageUseCase -> VivaSofiaEventPublisherPort` para asegurar que cada evento se dispara una sola vez por mensaje idempotente.
+
 ## Verificacion
 
 ```bash
@@ -306,6 +323,8 @@ Los tests actuales cubren extraccion de eventos Messenger/Instagram, normalizaci
 ## Flujo Git/GitHub
 
 Este proyecto lo desarrolla una sola persona. Cuando Codex suba cambios a GitHub, debe trabajar directamente sobre `main` y hacer push a `main`. No crear ramas nuevas salvo que se pida explicitamente o que el proyecto pase a tener un equipo mas grande.
+
+A partir de este punto, los commits deben usar convencion semantica: `feat:`, `fix:`, `chore:`, `docs:`, `refactor:` o `test:` segun el tipo de cambio.
 
 ## Notas de resiliencia
 
