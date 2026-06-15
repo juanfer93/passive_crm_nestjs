@@ -3,9 +3,13 @@ import { DealerProfileResolver } from '@/features/meta-messaging-webhook/applica
 import { MetaWebhookMessageExtractor } from '@/features/meta-messaging-webhook/application/services/meta-webhook-message-extractor.service';
 import { EnsureMetaUserProfileUseCase } from '@/features/meta-messaging-webhook/application/use-cases/ensure-meta-user-profile.use-case';
 import { ConversationMessage } from '@/features/meta-messaging-webhook/domain/entities/conversation-message.entity';
+import { CustomerProfile } from '@/features/meta-messaging-webhook/domain/entities/customer-profile.entity';
 import { IncomingMetaMessage } from '@/features/meta-messaging-webhook/domain/entities/incoming-meta-message.entity';
 import { LeadCustomFields } from '@/features/meta-messaging-webhook/domain/entities/lead-custom-fields.entity';
-import { VivaSofiaEventType } from '@/features/meta-messaging-webhook/domain/entities/viva-sofia-event.entity';
+import {
+  VivaCustomer,
+  VivaSofiaEventType,
+} from '@/features/meta-messaging-webhook/domain/entities/viva-sofia-event.entity';
 import { buildCompletedLeadCourtesyReply } from '@/features/meta-messaging-webhook/domain/services/completed-lead-courtesy-reply.service';
 import { shouldReactivateLeadQualification } from '@/features/meta-messaging-webhook/domain/services/lead-qualification-reactivation.service';
 import {
@@ -335,6 +339,7 @@ export class ProcessIncomingMetaMessageUseCase {
       const basePayload = {
         leadId: this.leadId(source),
         ghlContactId: null,
+        customer: this.buildVivaCustomer(state?.customerProfile),
         buyerDNA: buildVivaBuyerDNA(leadFields),
         intent: buildVivaIntent(leadFields),
         conversation: {
@@ -379,6 +384,18 @@ export class ProcessIncomingMetaMessageUseCase {
     }
 
     return [...new Set(eventTypes)];
+  }
+
+  private buildVivaCustomer(profile?: CustomerProfile): VivaCustomer {
+    const firstName = profile?.firstName ?? null;
+    const lastName = profile?.lastName ?? null;
+    const fullName = profile?.fullName ?? [firstName, lastName].filter(Boolean).join(' ').trim() || null;
+
+    return {
+      firstName,
+      lastName,
+      fullName,
+    };
   }
 
   private leadId(source: IncomingMetaMessage): string {
