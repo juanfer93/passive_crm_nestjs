@@ -42,6 +42,10 @@ export class MetaMessagingAdapter
     text: string,
     pageId?: string,
   ): Promise<void> {
+    if (channel === 'whatsapp') {
+      throw new Error('MetaMessagingAdapter cannot send WhatsApp Web messages.');
+    }
+
     const metaNodeId = this.metaNodeIdFor(channel, pageId);
 
     await this.http.axiosRef.post(
@@ -121,6 +125,10 @@ export class MetaMessagingAdapter
   }
 
   private metaNodeIdFor(channel: MetaMessagingChannel, pageId?: string): string {
+    if (channel === 'whatsapp') {
+      throw new Error('MetaMessagingAdapter cannot resolve a Meta node for WhatsApp Web.');
+    }
+
     if (pageId) {
       return pageId;
     }
