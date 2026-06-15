@@ -1,6 +1,6 @@
 export type ConversationMessageDirection = 'inbound' | 'outbound';
 export type ConversationMessageKind = 'text' | 'audio' | 'image' | 'unknown';
-export type MetaMessagingChannel = 'messenger' | 'instagram';
+export type MetaMessagingChannel = 'messenger' | 'instagram' | 'whatsapp';
 
 export interface ConversationMessage {
   id: string;
