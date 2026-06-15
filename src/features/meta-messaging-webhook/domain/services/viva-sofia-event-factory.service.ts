@@ -5,7 +5,23 @@ import {
   VivaLeadIntent,
 } from '@/features/meta-messaging-webhook/domain/entities/viva-sofia-event.entity';
 
-const POSITIVE_DOCUMENT_VALUES = ['confirmed', 'received', 'uploaded', 'yes', 'si', 'sí', 'true'];
+const POSITIVE_DOCUMENT_VALUES = [
+  'confirmed',
+  'received',
+  'uploaded',
+  'yes',
+  'si',
+  'sí',
+  'true',
+  'itin',
+  'ssn',
+  'social',
+  'passport',
+  'pasaporte',
+  'id',
+  'license',
+  'licencia',
+];
 
 export function buildVivaBuyerDNA(fields: LeadCustomFields): VivaBuyerDNA {
   return {
