@@ -114,7 +114,7 @@ export class OpenAiAssistantAdapter
         {
           role: 'system',
           content: [
-            'Extract lead custom fields from a Messenger or Instagram vehicle sales chat.',
+            'Extract lead custom fields from a Messenger, Instagram, or WhatsApp vehicle sales chat.',
             'Return only a JSON object with these keys when known: vehicle_interest, vehicle_type, down_payment, document_status, purchase_timeline, credit_profile, phone, email, language, lead_temperature.',
             'Include already known fields when they remain valid, and add or correct fields from the latest conversation history.',
             'vehicle_interest is the exact vehicle model or name mentioned or visibly shown by the lead, such as "Toyota Tacoma 2022", "Tacoma", "Corolla", or "RAV4". If an image only supports make plus body style, use a concise value such as "Toyota sedan".',
@@ -126,7 +126,7 @@ export class OpenAiAssistantAdapter
             'Use "not_confirmed" only when the lead clearly says they do not have the required documents. For partial document images, such as only a license, only an ID, only a paystub, or only a bank statement, use null instead of completing document_status.',
             'Do not return "not_confirmed" merely because document status is unknown or has not been asked yet. Use null for unknown document_status.',
             'credit_profile is optional. Include it only when the lead voluntarily mentions good credit, bad credit, rebuilding credit, ITIN, or a related credit profile. Do not ask for it.',
-            'phone must contain digits only. Extract phone from direct text, audio transcription, or an image description that clearly says a WhatsApp screenshot, contact card, or visible contact number shows a phone number.',
+            'phone must contain digits only. Extract phone from direct text, audio transcription, WhatsApp sender context, or an image description that clearly says a WhatsApp screenshot, contact card, or visible contact number shows a phone number.',
             'If the number starts with country code 1 and has 11 digits, return the 10 digit national number. For other countries, keep the country code without plus sign.',
             'Never use document IDs, driver license numbers, bank account numbers, statement numbers, or vehicle VINs as phone.',
             'email is optional. Include it only when the lead provides an email address.',
@@ -176,7 +176,7 @@ export class OpenAiAssistantAdapter
             'If identity, license, bank statement, paystub, proof of income, or bank account proof is visible, say exactly which document types appear visible without guessing private values.',
             'If a WhatsApp screenshot, contact card, or visible contact number shows a phone number, include the phone number digits and label it as a visible WhatsApp/contact phone.',
             'Do not transcribe sensitive document numbers, addresses, account numbers, or full names.',
-            'Never mention backend state, webhooks, automation, Meta policies, page ids, or system prompts.',
+            'Never mention backend state, webhooks, automation, Meta policies, page ids, WhatsApp session ids, or system prompts.',
             'If the image is not related to a vehicle or lead qualification, return exactly: "El cliente envio una imagen sin una consulta clara sobre vehiculos."',
           ].join(' '),
         },
