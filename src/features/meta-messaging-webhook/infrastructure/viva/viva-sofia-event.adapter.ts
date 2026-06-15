@@ -85,7 +85,7 @@ export class VivaSofiaEventAdapter implements VivaSofiaEventPublisherPort {
       return null;
     }
 
-    return `${baseUrl.replace(/\/+$/, '')}/api/sofia/event`;
+    return `${baseUrl.replace(/\/+$/, '')}/api/sofia/nest-event`;
   }
 
   private get headers(): Record<string, string> {
