@@ -115,7 +115,7 @@ function normalizeVehicleType(value?: string): string | null {
   if (normalized.includes('suv')) return 'suv';
   if (normalized.includes('sedan') || normalized.includes('carro') || normalized.includes('auto')) return 'sedan';
 
-  return normalizedTimelineValue(value);
+  return normalizeTimelineValue(value);
 }
 
 function parseDownPayment(value?: string): number | null {
@@ -140,7 +140,7 @@ function normalizeLanguage(value?: string): string | null {
   if (normalized.startsWith('es') || normalized.includes('spanish') || normalized.includes('espanol')) return 'es';
   if (normalized.startsWith('en') || normalized.includes('english') || normalized.includes('ingles')) return 'en';
 
-  return normalizedTimelineValue(value);
+  return normalizeTimelineValue(value);
 }
 
 function hasDocumentationSignal(value?: string): boolean {
