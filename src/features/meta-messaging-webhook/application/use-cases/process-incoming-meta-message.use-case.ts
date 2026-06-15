@@ -1,13 +1,22 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { DealerProfileResolver } from '@/features/meta-messaging-webhook/application/services/dealer-profile-resolver.service';
 import { MetaWebhookMessageExtractor } from '@/features/meta-messaging-webhook/application/services/meta-webhook-message-extractor.service';
 import { EnsureMetaUserProfileUseCase } from '@/features/meta-messaging-webhook/application/use-cases/ensure-meta-user-profile.use-case';
 import { ConversationMessage } from '@/features/meta-messaging-webhook/domain/entities/conversation-message.entity';
 import { IncomingMetaMessage } from '@/features/meta-messaging-webhook/domain/entities/incoming-meta-message.entity';
 import { LeadCustomFields } from '@/features/meta-messaging-webhook/domain/entities/lead-custom-fields.entity';
+import { VivaSofiaEventType } from '@/features/meta-messaging-webhook/domain/entities/viva-sofia-event.entity';
 import { buildCompletedLeadCourtesyReply } from '@/features/meta-messaging-webhook/domain/services/completed-lead-courtesy-reply.service';
 import { shouldReactivateLeadQualification } from '@/features/meta-messaging-webhook/domain/services/lead-qualification-reactivation.service';
+import {
+  buildVivaBuyerDNA,
+  buildVivaConversationSummary,
+  buildVivaIntent,
+  hasBuyerDNAChanged,
+  hasDocumentationJustReceived,
+  hasPurchaseIntentJustDetected,
+  lastInboundMessage,
+} from '@/features/meta-messaging-webhook/domain/services/viva-sofia-event-factory.service';
 import {
   ASSISTANT_REPLY_GENERATOR,
   AssistantReplyGeneratorPort,
@@ -38,8 +47,11 @@ import {
   META_MESSENGER,
   MetaMessengerPort,
 } from '@/features/meta-messaging-webhook/domain/ports/meta-messenger.port';
+import {
+  VIVA_SOFIA_EVENT_PUBLISHER,
+  VivaSofiaEventPublisherPort,
+} from '@/features/meta-messaging-webhook/domain/ports/viva-sofia-event-publisher.port';
 import { MetaWebhookPayload } from '@/features/meta-messaging-webhook/domain/types/meta-webhook-payload.type';
-import { SofiaWebhookBridgeService } from '@/features/sofia-engine/application/services/sofia-webhook-bridge.service';
 
 @Injectable()
 export class ProcessIncomingMetaMessageUseCase {
@@ -65,8 +77,8 @@ export class ProcessIncomingMetaMessageUseCase {
     private readonly crmSink: CrmSinkPort,
     @Inject(BACKGROUND_TASK_RUNNER)
     private readonly background: BackgroundTaskRunnerPort,
-    private readonly sofiaWebhookBridge: SofiaWebhookBridgeService,
-    private readonly config: ConfigService,
+    @Inject(VIVA_SOFIA_EVENT_PUBLISHER)
+    private readonly vivaEvents: VivaSofiaEventPublisherPort,
   ) {}
 
   async execute(payload: MetaWebhookPayload): Promise<void> {
@@ -104,6 +116,8 @@ export class ProcessIncomingMetaMessageUseCase {
     );
     const shouldReactivate = shouldReactivateLeadQualification(currentState, new Date());
     const hasPriorConversation = !shouldReactivate && Boolean(currentState?.messages.length);
+    const previousLeadFields = shouldReactivate ? {} : currentState?.leadCustomFields ?? {};
+    const isNewLead = !currentState;
 
     if (shouldReactivate) {
       await this.conversationState.reactivateLeadQualification(
@@ -126,7 +140,6 @@ export class ProcessIncomingMetaMessageUseCase {
       const reply = buildCompletedLeadCourtesyReply(inboundText);
 
       if (!reply) {
-        this.triggerSofia(message);
         return;
       }
 
@@ -147,7 +160,6 @@ export class ProcessIncomingMetaMessageUseCase {
         occurredAt: new Date(),
       });
 
-      this.triggerSofia(message);
       return;
     }
 
@@ -163,7 +175,7 @@ export class ProcessIncomingMetaMessageUseCase {
       channel: message.channel,
       contactId: message.contactId,
       recentMessages,
-      knownFields: shouldReactivate ? {} : currentState?.leadCustomFields ?? {},
+      knownFields: previousLeadFields,
       dealerProfile,
     });
     const leadQualification = await this.conversationState.mergeLeadCustomFields(
@@ -205,21 +217,14 @@ export class ProcessIncomingMetaMessageUseCase {
 
     await this.conversationState.appendMessage(outboundMessage);
 
-    if (leadQualification.status !== 'completed') {
-      await this.conversationState.scheduleFollowUp(
-        message.channel,
-        message.contactId,
-        {
-          status: 'active',
-          attempts: 0,
-          nextFollowUpAt: this.nextFollowUpAt(new Date()),
-        },
-        message.pageId,
-      );
-    }
-
     this.syncToPassiveCrm(message, leadQualification.customFields, inboundMessage, outboundMessage);
-    this.triggerSofia(message);
+    this.publishVivaSofiaEvents(
+      message,
+      previousLeadFields,
+      leadQualification.customFields,
+      [inboundMessage, outboundMessage],
+      isNewLead,
+    );
   }
 
   private async resolveMessageText(message: IncomingMetaMessage): Promise<string> {
@@ -271,15 +276,6 @@ export class ProcessIncomingMetaMessageUseCase {
     return 'El cliente envio un archivo sin texto util para la calificacion. Continua con la siguiente pregunta pendiente.';
   }
 
-  private nextFollowUpAt(from: Date): Date {
-    return new Date(from.getTime() + this.followUpDelayMs);
-  }
-
-  private get followUpDelayMs(): number {
-    const configuredHours = this.config.get<number>('FOLLOW_UP_DELAY_HOURS', 2);
-    return configuredHours * 60 * 60 * 1000;
-  }
-
   private syncToPassiveCrm(
     source: IncomingMetaMessage,
     leadFields: LeadCustomFields,
@@ -302,7 +298,7 @@ export class ProcessIncomingMetaMessageUseCase {
         channel: source.channel,
         pageId: source.pageId,
         contactId: source.contactId,
-        conversationKey: `${source.channel}:${source.pageId ?? 'local'}:${source.contactId}`,
+        conversationKey: this.leadId(source),
         customerProfile: state?.customerProfile,
         qualificationCompletedAt: state?.qualificationCompletedAt,
         messages: state?.messages ?? messages,
@@ -314,10 +310,78 @@ export class ProcessIncomingMetaMessageUseCase {
     });
   }
 
-  private triggerSofia(source: IncomingMetaMessage): void {
-    this.background.run('sofia-webhook-trigger', async () => {
-      const leadId = `${source.channel}:${source.pageId ?? 'local'}:${source.contactId}`;
-      await this.sofiaWebhookBridge.handleIncomingLead(leadId);
+  private publishVivaSofiaEvents(
+    source: IncomingMetaMessage,
+    previousLeadFields: LeadCustomFields,
+    currentLeadFields: LeadCustomFields,
+    messages: ConversationMessage[],
+    isNewLead: boolean,
+  ): void {
+    const eventTypes = this.resolveVivaEventTypes(previousLeadFields, currentLeadFields, isNewLead);
+
+    if (eventTypes.length === 0) {
+      return;
+    }
+
+    this.background.run('viva-sofia-event-publisher', async () => {
+      const state = await this.conversationState.getState(
+        source.channel,
+        source.contactId,
+        source.pageId,
+      );
+      const leadFields = state?.leadCustomFields ?? currentLeadFields;
+      const conversationMessages = state?.messages?.length ? state.messages : messages;
+      const lastInbound = lastInboundMessage(conversationMessages);
+      const basePayload = {
+        leadId: this.leadId(source),
+        ghlContactId: null,
+        buyerDNA: buildVivaBuyerDNA(leadFields),
+        intent: buildVivaIntent(leadFields),
+        conversation: {
+          summary: buildVivaConversationSummary(leadFields, conversationMessages),
+          lastMessage: lastInbound?.text ?? null,
+          channel: source.channel,
+          pageId: source.pageId ?? null,
+          contactId: source.contactId,
+        },
+      };
+
+      for (const event of eventTypes) {
+        await this.vivaEvents.publish({
+          ...basePayload,
+          event,
+        });
+      }
     });
+  }
+
+  private resolveVivaEventTypes(
+    previousLeadFields: LeadCustomFields,
+    currentLeadFields: LeadCustomFields,
+    isNewLead: boolean,
+  ): VivaSofiaEventType[] {
+    const eventTypes: VivaSofiaEventType[] = [];
+
+    if (isNewLead) {
+      eventTypes.push('new_lead');
+    }
+
+    if (!isNewLead && hasBuyerDNAChanged(previousLeadFields, currentLeadFields)) {
+      eventTypes.push('buyer_dna_updated');
+    }
+
+    if (hasPurchaseIntentJustDetected(previousLeadFields, currentLeadFields)) {
+      eventTypes.push('purchase_intent_detected');
+    }
+
+    if (hasDocumentationJustReceived(previousLeadFields, currentLeadFields)) {
+      eventTypes.push('documentation_received');
+    }
+
+    return [...new Set(eventTypes)];
+  }
+
+  private leadId(source: IncomingMetaMessage): string {
+    return `${source.channel}:${source.pageId ?? 'local'}:${source.contactId}`;
   }
 }
