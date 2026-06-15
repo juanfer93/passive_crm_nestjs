@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConversationState } from '@/features/meta-messaging-webhook/domain/entities/conversation-state.entity';
+import { MetaMessagingChannel } from '@/features/meta-messaging-webhook/domain/entities/conversation-message.entity';
 import {
   CONVERSATION_STATE_REPOSITORY,
   ConversationStateRepository,
@@ -11,7 +12,7 @@ import {
 
 interface EnsureMetaUserProfileInput {
   state: ConversationState | null;
-  channel: 'messenger' | 'instagram';
+  channel: MetaMessagingChannel;
   pageId?: string;
   contactId: string;
 }
@@ -43,6 +44,10 @@ export class EnsureMetaUserProfileUseCase {
   ) {}
 
   async execute(input: EnsureMetaUserProfileInput): Promise<void> {
+    if (input.channel === 'whatsapp') {
+      return;
+    }
+
     if (input.state?.customerProfile?.fetchStatus === 'success') {
       return;
     }
