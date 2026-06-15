@@ -6,6 +6,12 @@ export type VivaSofiaEventType =
   | 'appointment_created'
   | 'call_completed';
 
+export interface VivaCustomer {
+  firstName: string | null;
+  lastName: string | null;
+  fullName: string | null;
+}
+
 export interface VivaBuyerDNA {
   vehicleType: string | null;
   vehicleInterest: string | null;
@@ -32,6 +38,7 @@ export interface VivaSofiaEventPayload {
   event: VivaSofiaEventType;
   leadId: string;
   ghlContactId: string | null;
+  customer: VivaCustomer;
   buyerDNA: VivaBuyerDNA;
   intent: VivaLeadIntent;
   conversation: VivaConversationContext;
