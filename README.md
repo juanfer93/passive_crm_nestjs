@@ -118,6 +118,11 @@ Si `VIVA_SOFIA_EVENT_URL` no existe, el adaptador construye el endpoint con `VIV
   "event": "new_lead",
   "leadId": "messenger:meta-page-1:12345",
   "ghlContactId": null,
+  "customer": {
+    "firstName": "Carlos",
+    "lastName": "Rivera",
+    "fullName": "Carlos Rivera"
+  },
   "buyerDNA": {
     "vehicleType": "truck",
     "vehicleInterest": "Toyota Tacoma",
@@ -141,6 +146,8 @@ Si `VIVA_SOFIA_EVENT_URL` no existe, el adaptador construye el endpoint con `VIV
 ```
 
 `leadId` canonico usa `channel:pageId:contactId`, por ejemplo `messenger:meta-page-1:12345`.
+
+El bloque `customer` se alimenta desde el perfil de Meta guardado en MongoDB. Si Meta no devuelve nombre, NestJS envia `firstName`, `lastName` y `fullName` como `null` para mantener estable el contrato.
 
 ## MongoDB como fuente de verdad conversacional
 
@@ -299,7 +306,7 @@ Estas piezas quedan pendientes para completar el flujo end-to-end y deben valida
 
 1. Configurar en ambiente la URL real de VIVA: `VIVA_SOFIA_EVENT_URL` o `VIVA_API_BASE_URL`.
 2. Configurar `VIVA_INTERNAL_API_KEY` si el endpoint `POST /api/sofia/event` de VIVA exige autenticacion interna.
-3. Confirmar que VIVA acepte el payload actual con `event`, `leadId`, `ghlContactId`, `buyerDNA`, `intent` y `conversation`.
+3. Confirmar que VIVA acepte el payload actual con `event`, `leadId`, `ghlContactId`, `customer`, `buyerDNA`, `intent` y `conversation`.
 4. Definir si VIVA necesita un `ghlContactId` real en el payload. Actualmente NestJS envia `ghlContactId: null` porque el adaptador GHL resuelve el contacto internamente por telefono y no expone ese ID al publisher de VIVA.
 5. Conectar `appointment_created` cuando exista en NestJS un flujo real que cree citas o reciba confirmacion conversacional de una cita creada.
 6. Conectar `call_completed` cuando exista en NestJS un hook real de llamadas completadas o cuando Retell/VIVA reporte ese evento al backend conversacional.
