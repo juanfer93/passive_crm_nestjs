@@ -4,7 +4,6 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { AcceptMetaWebhookUseCase } from '@/features/meta-messaging-webhook/application/use-cases/accept-meta-webhook.use-case';
 import { EnsureMetaUserProfileUseCase } from '@/features/meta-messaging-webhook/application/use-cases/ensure-meta-user-profile.use-case';
 import { ProcessIncomingMetaMessageUseCase } from '@/features/meta-messaging-webhook/application/use-cases/process-incoming-meta-message.use-case';
-import { ProcessDueFollowUpsUseCase } from '@/features/meta-messaging-webhook/application/use-cases/process-due-follow-ups.use-case';
 import { SimulateTerminalConversationUseCase } from '@/features/meta-messaging-webhook/application/use-cases/simulate-terminal-conversation.use-case';
 import { VerifyMetaWebhookUseCase } from '@/features/meta-messaging-webhook/application/use-cases/verify-meta-webhook.use-case';
 import { DealerProfileResolver } from '@/features/meta-messaging-webhook/application/services/dealer-profile-resolver.service';
@@ -19,8 +18,8 @@ import { MESSAGE_IDEMPOTENCY_STORE } from '@/features/meta-messaging-webhook/dom
 import { LEAD_CUSTOM_FIELDS_EXTRACTOR } from '@/features/meta-messaging-webhook/domain/ports/lead-custom-fields-extractor.port';
 import { META_MESSENGER } from '@/features/meta-messaging-webhook/domain/ports/meta-messenger.port';
 import { META_USER_PROFILE } from '@/features/meta-messaging-webhook/domain/ports/meta-user-profile.port';
+import { VIVA_SOFIA_EVENT_PUBLISHER } from '@/features/meta-messaging-webhook/domain/ports/viva-sofia-event-publisher.port';
 import { NodeBackgroundTaskRunner } from '@/features/meta-messaging-webhook/infrastructure/background/node-background-task-runner';
-import { NodeFollowUpWorker } from '@/features/meta-messaging-webhook/infrastructure/background/node-follow-up-worker';
 import { GhlPassiveCrmAdapter } from '@/features/meta-messaging-webhook/infrastructure/ghl/ghl-passive-crm.adapter';
 import { MetaMessagingAdapter } from '@/features/meta-messaging-webhook/infrastructure/meta/meta-messaging.adapter';
 import { MongoConversationStateRepository } from '@/features/meta-messaging-webhook/infrastructure/mongo/mongo-conversation-state.repository';
@@ -31,11 +30,9 @@ import {
   MessageReceiptSchema,
 } from '@/features/meta-messaging-webhook/infrastructure/mongo/schemas/message-receipt.schema';
 import { OpenAiAssistantAdapter } from '@/features/meta-messaging-webhook/infrastructure/openai/openai-assistant.adapter';
+import { VivaSofiaEventAdapter } from '@/features/meta-messaging-webhook/infrastructure/viva/viva-sofia-event.adapter';
 import { MetaMessagingWebhookController } from '@/features/meta-messaging-webhook/presentation/controllers/meta-messaging-webhook.controller';
 import { MetaSignatureGuard } from '@/features/meta-messaging-webhook/presentation/guards/meta-signature.guard';
-import { HlnCrmSinkAdapter } from '@/features/meta-messaging-webhook/infrastructure/hln/hln-crm-sink.adapter';
-import { CompositeCrmSinkAdapter } from '@/features/meta-messaging-webhook/infrastructure/hln/composite-crm-sink.adapter';
-import { SofiaEngineModule } from '@/features/sofia-engine/sofia-engine.module';
 
 @Module({
   imports: [
@@ -43,7 +40,6 @@ import { SofiaEngineModule } from '@/features/sofia-engine/sofia-engine.module';
       timeout: 8000,
       maxRedirects: 3,
     }),
-    SofiaEngineModule,
     MongooseModule.forFeature([
       { name: Conversation.name, schema: ConversationSchema },
       { name: MessageReceipt.name, schema: MessageReceiptSchema },
@@ -53,7 +49,6 @@ import { SofiaEngineModule } from '@/features/sofia-engine/sofia-engine.module';
   providers: [
     AcceptMetaWebhookUseCase,
     EnsureMetaUserProfileUseCase,
-    ProcessDueFollowUpsUseCase,
     ProcessIncomingMetaMessageUseCase,
     SimulateTerminalConversationUseCase,
     VerifyMetaWebhookUseCase,
@@ -64,9 +59,7 @@ import { SofiaEngineModule } from '@/features/sofia-engine/sofia-engine.module';
     OpenAiAssistantAdapter,
     GhlPassiveCrmAdapter,
     NodeBackgroundTaskRunner,
-    NodeFollowUpWorker,
-    HlnCrmSinkAdapter,
-    CompositeCrmSinkAdapter,
+    VivaSofiaEventAdapter,
     {
       provide: BACKGROUND_TASK_RUNNER,
       useExisting: NodeBackgroundTaskRunner,
@@ -105,7 +98,11 @@ import { SofiaEngineModule } from '@/features/sofia-engine/sofia-engine.module';
     },
     {
       provide: CRM_SINK,
-      useExisting: CompositeCrmSinkAdapter ,
+      useExisting: GhlPassiveCrmAdapter,
+    },
+    {
+      provide: VIVA_SOFIA_EVENT_PUBLISHER,
+      useExisting: VivaSofiaEventAdapter,
     },
   ],
 })
