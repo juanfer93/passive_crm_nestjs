@@ -31,7 +31,7 @@ export class HlnCrmSinkAdapter implements CrmSinkPort {
       return;
     }
 
-    const skipReasons = this.hlnSkipReasons(fields, context);
+    const skipReasons = this.hlnSkipReasons(fields);
 
     if (skipReasons.length > 0) {
       this.logger.warn({
@@ -142,25 +142,8 @@ export class HlnCrmSinkAdapter implements CrmSinkPort {
     return this.config.get<string>('HLN_SYNC_ENABLED') === 'true';
   }
 
-  private hlnSkipReasons(fields: LeadCustomFields, context?: CrmLeadSyncContext): string[] {
-    const reasons = this.missingLeadFieldReasons(fields);
-    const customerProfile = context?.customerProfile;
-
-    if (customerProfile?.fetchStatus !== 'success') {
-      reasons.push('customerProfile.fetchStatus is not success');
-    }
-
-    if (
-      !this.fullName(
-        customerProfile?.fullName,
-        customerProfile?.firstName,
-        customerProfile?.lastName,
-      )
-    ) {
-      reasons.push('customerProfile fullName is missing');
-    }
-
-    return reasons;
+  private hlnSkipReasons(fields: LeadCustomFields): string[] {
+    return this.missingLeadFieldReasons(fields);
   }
 
   private missingLeadFieldReasons(fields: LeadCustomFields): string[] {
