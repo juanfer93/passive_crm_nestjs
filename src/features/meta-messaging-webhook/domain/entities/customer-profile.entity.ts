@@ -8,7 +8,7 @@ export interface CustomerProfile {
   phone?: string | null;
   email?: string | null;
   language?: string | null;
-  source?: 'meta';
+  source?: 'meta' | 'whatsapp';
   fetchStatus?: CustomerProfileFetchStatus;
   fetchedAt?: Date;
   lastError?: string | null;
