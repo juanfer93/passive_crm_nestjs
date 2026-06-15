@@ -21,6 +21,8 @@ import { META_USER_PROFILE } from '@/features/meta-messaging-webhook/domain/port
 import { VIVA_SOFIA_EVENT_PUBLISHER } from '@/features/meta-messaging-webhook/domain/ports/viva-sofia-event-publisher.port';
 import { NodeBackgroundTaskRunner } from '@/features/meta-messaging-webhook/infrastructure/background/node-background-task-runner';
 import { GhlPassiveCrmAdapter } from '@/features/meta-messaging-webhook/infrastructure/ghl/ghl-passive-crm.adapter';
+import { CompositeCrmSinkAdapter } from '@/features/meta-messaging-webhook/infrastructure/hln/composite-crm-sink.adapter';
+import { HlnCrmSinkAdapter } from '@/features/meta-messaging-webhook/infrastructure/hln/hln-crm-sink.adapter';
 import { MetaMessagingAdapter } from '@/features/meta-messaging-webhook/infrastructure/meta/meta-messaging.adapter';
 import { MongoConversationStateRepository } from '@/features/meta-messaging-webhook/infrastructure/mongo/mongo-conversation-state.repository';
 import { MongoMessageIdempotencyStore } from '@/features/meta-messaging-webhook/infrastructure/mongo/mongo-message-idempotency.store';
@@ -58,6 +60,8 @@ import { MetaSignatureGuard } from '@/features/meta-messaging-webhook/presentati
     MetaMessagingAdapter,
     OpenAiAssistantAdapter,
     GhlPassiveCrmAdapter,
+    HlnCrmSinkAdapter,
+    CompositeCrmSinkAdapter,
     NodeBackgroundTaskRunner,
     VivaSofiaEventAdapter,
     {
@@ -98,7 +102,7 @@ import { MetaSignatureGuard } from '@/features/meta-messaging-webhook/presentati
     },
     {
       provide: CRM_SINK,
-      useExisting: GhlPassiveCrmAdapter,
+      useExisting: CompositeCrmSinkAdapter,
     },
     {
       provide: VIVA_SOFIA_EVENT_PUBLISHER,
