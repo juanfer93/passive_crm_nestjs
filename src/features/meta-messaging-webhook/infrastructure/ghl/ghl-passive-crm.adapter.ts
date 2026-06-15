@@ -1,7 +1,10 @@
 import { HttpService } from '@nestjs/axios';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ConversationMessage } from '@/features/meta-messaging-webhook/domain/entities/conversation-message.entity';
+import {
+  ConversationMessage,
+  MetaMessagingChannel,
+} from '@/features/meta-messaging-webhook/domain/entities/conversation-message.entity';
 import { LeadCustomFields } from '@/features/meta-messaging-webhook/domain/entities/lead-custom-fields.entity';
 import {
   CrmLeadSyncContext,
@@ -26,7 +29,7 @@ export class GhlPassiveCrmAdapter implements CrmSinkPort {
         {
           locationId: this.locationId,
           contactId,
-          type: message.channel === 'instagram' ? 'Instagram' : 'Messenger',
+          type: this.conversationType(message.channel),
           direction: message.direction,
           message: message.text,
           occurredAt: message.occurredAt.toISOString(),
@@ -113,6 +116,12 @@ export class GhlPassiveCrmAdapter implements CrmSinkPort {
     } catch (error: unknown) {
       this.logger.error(`GHL destination JSON write failed: ${operation}`, error);
     }
+  }
+
+  private conversationType(channel: MetaMessagingChannel): string {
+    if (channel === 'instagram') return 'Instagram';
+    if (channel === 'whatsapp') return 'WhatsApp';
+    return 'Messenger';
   }
 
   private get isEnabled(): boolean {
