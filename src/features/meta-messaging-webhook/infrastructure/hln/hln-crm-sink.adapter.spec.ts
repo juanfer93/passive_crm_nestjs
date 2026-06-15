@@ -80,7 +80,63 @@ describe('HlnCrmSinkAdapter', () => {
     );
   });
 
-  it('does not send to HLN until required fields and a successful customer name are available', async () => {
+  it('does not require a successful Meta profile to send the complete lead sync payload', async () => {
+    const log = jest.spyOn(Logger.prototype, 'log').mockImplementation();
+    const fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 200 });
+    jest.spyOn(global, 'fetch').mockImplementation(fetchMock);
+    const adapter = new HlnCrmSinkAdapter(
+      configService({
+        HLN_SYNC_ENABLED: 'true',
+        HLN_WEBHOOK_URL: 'https://hln.example/webhook',
+        HLN_DEALER_ID: '4',
+      }),
+    );
+
+    await adapter.updateCustomFields(
+      '3055555555',
+      {
+        phone: '3055555555',
+        language: 'es',
+        purchase_timeline: 'esta semana',
+        lead_temperature: 'hot',
+        vehicle_interest: 'Toyota Corolla',
+        vehicle_type: 'Sedan',
+        down_payment: '2000',
+        document_status: 'confirmed',
+      },
+      {
+        channel: 'messenger',
+        contactId: '9334258666654026',
+        conversationKey: 'messenger:page-1:9334258666654026',
+        customerProfile: {
+          fetchStatus: 'failed',
+        },
+        messages: [],
+      },
+    );
+
+    const payload = JSON.parse(fetchMock.mock.calls[0][1].body as string) as {
+      metaUserId: string;
+      customer: { firstName: string | null; lastName: string | null; fullName: string | null };
+    };
+
+    expect(payload.metaUserId).toBe('9334258666654026');
+    expect(payload.customer).toEqual(
+      expect.objectContaining({
+        firstName: null,
+        lastName: null,
+        fullName: null,
+      }),
+    );
+    expect(log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'hln_webhook_sent',
+        conversationKey: 'messenger:page-1:9334258666654026',
+      }),
+    );
+  });
+
+  it('does not send to HLN until required fields are available', async () => {
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
     const fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 200 });
     jest.spyOn(global, 'fetch').mockImplementation(fetchMock);
@@ -115,43 +171,12 @@ describe('HlnCrmSinkAdapter', () => {
         messages: [],
       },
     );
-    await adapter.updateCustomFields(
-      '3055555555',
-      {
-        phone: '3055555555',
-        language: 'es',
-        purchase_timeline: 'esta semana',
-        lead_temperature: 'hot',
-        vehicle_interest: 'Toyota Corolla',
-        vehicle_type: 'Sedan',
-        down_payment: '2000',
-        document_status: 'confirmed',
-      },
-      {
-        channel: 'messenger',
-        contactId: '9334258666654026',
-        conversationKey: 'messenger:page-1:9334258666654026',
-        customerProfile: {
-          fetchStatus: 'failed',
-        },
-        messages: [],
-      },
-    );
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(warn).toHaveBeenCalledWith(
       expect.objectContaining({
         event: 'hln_webhook_skipped',
         reasons: expect.arrayContaining(['leadCustomFields.vehicle_interest is missing']),
-      }),
-    );
-    expect(warn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        event: 'hln_webhook_skipped',
-        reasons: expect.arrayContaining([
-          'customerProfile.fetchStatus is not success',
-          'customerProfile fullName is missing',
-        ]),
       }),
     );
   });
