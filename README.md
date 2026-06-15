@@ -1,19 +1,69 @@
 # Passive CRM NestJS Starter
 
-Backend NestJS para Meta Messenger e Instagram Messaging con arquitectura Feature-First + Onion Architecture.
+Backend NestJS para Meta Messenger, Instagram Messaging y WhatsApp Web.
 
-Tambien incluye Sofia Agent Engine como motor interno centralizado para contexto, recomendaciones, prompts, acciones asistidas, actividad y aprendizaje. La inteligencia y las reglas viven en este backend; Meta, WhatsApp Web, Twilio y Retell son proveedores de ejecucion opcionales.
+Este repositorio queda definido como el cerebro conversacional de VIVA: conversa con el lead, entiende el contexto, extrae memoria, genera Buyer DNA, detecta intencion y sincroniza datos conversacionales. VIVA es el sistema operativo que decide y ejecuta acciones operativas.
+
+## Arquitectura final VIVA
+
+```text
+Lead
+  ↓
+Meta / WhatsApp
+  ↓
+NestJS Agent
+  ↓
+Mongo Memory
+  ↓
+Buyer DNA
+  ↓
+Intent Analysis
+  ↓
+Lead Summary
+  ↓
+POST /api/sofia/event en VIVA
+  ↓
+Sofia Brain
+  ↓
+Voice Agent / WhatsApp Agent / Appointment Agent / Document Agent / Reactivation Agent
+```
+
+## Responsabilidad de NestJS
+
+NestJS debe encargarse de:
+
+- WhatsApp conversations.
+- AI conversation logic.
+- Memory extraction.
+- Lead qualification.
+- Buyer DNA generation.
+- Intent detection.
+- Conversation summaries.
+- GHL synchronization.
+- MongoDB conversation history.
+
+NestJS no debe encargarse de:
+
+- Ejecutar llamadas.
+- Ejecutar follow-ups.
+- Ejecutar documentos.
+- Ejecutar citas.
+- Tomar decisiones operativas.
+
+Esas responsabilidades pertenecen a VIVA y a Sofia Brain dentro del sistema operativo.
 
 ## Principios
 
-- `Domain` contiene entidades, tipos y puertos puros.
-- `Application` contiene casos de uso y orquestacion.
-- `Infrastructure` contiene adaptadores concretos: MongoDB, Meta, OpenAI y GHL.
+- `Domain` contiene entidades, tipos, servicios puros y puertos.
+- `Application` contiene casos de uso y orquestacion conversacional.
+- `Infrastructure` contiene adaptadores concretos: MongoDB, Meta, OpenAI, GHL y VIVA webhooks.
 - `Presentation` contiene controllers y guards de NestJS.
-- GHL se trata exclusivamente como endpoint de destino donde el adaptador de infraestructura inyecta JSON estructurado.
-- La logica de negocio vive en NestJS. No se depende de triggers, workflows ni automatizaciones nativas del destino GHL.
+- MongoDB sigue siendo la fuente de verdad para conversaciones, mensajes, AI memory, Buyer DNA, intent y summaries.
+- GHL sigue siendo un destino de sincronizacion CRM.
+- VIVA recibe eventos enriquecidos y ejecuta la operacion.
+- No se duplica logica operativa en NestJS.
 
-## Flujo
+## Flujo conversacional
 
 1. Meta llama `POST /webhooks/meta/messaging` desde Messenger o Instagram.
 2. El controller devuelve `200 OK` inmediatamente.
@@ -22,10 +72,96 @@ Tambien incluye Sofia Agent Engine como motor interno centralizado para contexto
 5. Si el mensaje ya existe, el caso de uso detiene el procesamiento.
 6. Si hay audio o imagen, el backend descarga el binario y lo procesa con OpenAI.
 7. El asistente genera la respuesta y se envia por la API de Meta.
-8. El estado conversacional se persiste en MongoDB usando `channel + pageId + senderId` como identidad del chat, para que el mismo cliente pueda escribir a paginas distintas sin mezclar historiales.
+8. El estado conversacional se persiste en MongoDB usando `channel + pageId + senderId` como identidad del chat.
 9. OpenAI consulta el historial reciente guardado en MongoDB y extrae custom fields de lead.
-10. La escritura JSON hacia el destino GHL ocurre de forma secundaria y no bloqueante.
-11. Cada mensaje procesado por el webhook dispara en background una actualizacion de contexto y recomendacion de Sofia, sin cambiar ni bloquear la respuesta actual de Meta.
+10. La escritura JSON hacia GHL ocurre de forma secundaria y no bloqueante.
+11. NestJS publica eventos enriquecidos hacia VIVA para que Sofia Brain decida y ejecute.
+
+## Eventos enviados a VIVA
+
+NestJS envia un webhook a VIVA cuando detecta alguno de estos eventos dentro del flujo conversacional:
+
+- `new_lead`
+- `buyer_dna_updated`
+- `purchase_intent_detected`
+- `documentation_received`
+- `appointment_created` cuando exista un hook conversacional que cree citas.
+- `call_completed` cuando exista un hook conversacional que reciba llamadas completadas.
+
+Endpoint esperado en VIVA:
+
+```text
+POST /api/sofia/event
+```
+
+Variables soportadas:
+
+```bash
+VIVA_SYNC_ENABLED=true
+VIVA_SOFIA_EVENT_URL=https://viva.example.com/api/sofia/event
+# o alternativa:
+VIVA_API_BASE_URL=https://viva.example.com
+
+# opcional si VIVA protege el endpoint interno:
+VIVA_INTERNAL_API_KEY=your-internal-key
+
+# opcional:
+VIVA_WEBHOOK_TIMEOUT_MS=10000
+```
+
+Si `VIVA_SOFIA_EVENT_URL` no existe, el adaptador construye el endpoint con `VIVA_API_BASE_URL + /api/sofia/event`. Si ninguna variable existe, el evento se omite con log y no bloquea la conversacion.
+
+## Payload enviado a VIVA
+
+```json
+{
+  "event": "new_lead",
+  "leadId": "messenger:meta-page-1:12345",
+  "ghlContactId": null,
+  "buyerDNA": {
+    "vehicleType": "truck",
+    "vehicleInterest": "Toyota Tacoma",
+    "downPayment": 3500,
+    "creditProfile": "rebuilding",
+    "timeline": "this_week",
+    "language": "es"
+  },
+  "intent": {
+    "purchaseIntent": 91,
+    "readyBuyer": true
+  },
+  "conversation": {
+    "summary": "Customer wants Toyota Tacoma, has 3500 down, timeline: this week, language: es",
+    "lastMessage": "Tengo 3500 y quiero una Tacoma este sabado",
+    "channel": "messenger",
+    "pageId": "meta-page-1",
+    "contactId": "12345"
+  }
+}
+```
+
+`leadId` canonico usa `channel:pageId:contactId`, por ejemplo `messenger:meta-page-1:12345`.
+
+## MongoDB como fuente de verdad conversacional
+
+MongoDB conserva:
+
+- Conversation history.
+- Messages.
+- AI memory.
+- Buyer DNA / lead custom fields.
+- Intent.
+- Summaries derivados del historial.
+
+PostgreSQL pertenece a VIVA y debe conservar:
+
+- Leads.
+- Activities.
+- Appointments.
+- Tasks.
+- Sofia Decisions.
+- Sofia Queue.
+- Revenue Intelligence.
 
 ## Custom fields enviados a GHL
 
@@ -47,6 +183,7 @@ OpenAI extrae este JSON desde el historial de chat:
 ```
 
 `phone` se normaliza como digitos sin `+`. Si viene con indicativo `1` y tiene 11 digitos, se guarda como numero nacional de 10 digitos. Para otros paises se conserva el indicativo sin el signo `+`.
+
 `credit_profile` y `email` son opcionales y solo se guardan si el cliente los menciona. `lead_temperature` se deriva del timeline: hoy/esta semana/lo antes posible es `hot`, este mes es `warm`, y solo mirando es `cold`.
 
 ## Estructura
@@ -60,6 +197,7 @@ src/
       domain/
         entities/
         ports/
+        services/
         types/
       application/
         services/
@@ -70,10 +208,12 @@ src/
         meta/
         mongo/
         openai/
+        viva/
       presentation/
         controllers/
         guards/
       meta-messaging-webhook.module.ts
+    whatsapp-web/
 ```
 
 ## Claves API
@@ -89,7 +229,7 @@ pnpm start:dev
 
 ## Simular chat en terminal
 
-El simulador usa MongoDB para guardar historial/custom fields y OpenAI para responder, pero no llama a Meta ni a GHL.
+El simulador usa MongoDB para guardar historial/custom fields y OpenAI para responder, pero no llama a Meta, GHL ni VIVA.
 
 ```bash
 pnpm simulate:chat -- --profile offlease-fredericksburg --contact test-lead-1
@@ -132,9 +272,11 @@ pnpm simulate:media -- --profile offlease-fredericksburg --contact media-audio-t
 
 El output muestra `OpenAI audio transcription>` para audio, `Image analysis>` para imagenes y `Media notice>` para archivos no analizables.
 
-## Seguimientos automaticos
+## Follow-ups automaticos
 
-Cuando el bot deja una pregunta pendiente y el lead no responde, el backend agenda seguimientos persistidos en MongoDB por conversacion (`channel + pageId + senderId`). El worker revisa seguimientos vencidos y envia hasta 3 mensajes, uno cada 2 horas. Si el lead responde, el seguimiento pendiente se cancela y el flujo normal decide si agenda uno nuevo. Si los custom fields requeridos ya estan completos y la calificacion queda `completed`, no se agenda ni se envia ningun seguimiento adicional.
+NestJS ya no ejecuta follow-ups automaticos. La conversacion activa sigue respondiendo al lead, pero las tareas, reactivaciones y seguimientos operativos deben ser creados y ejecutados por VIVA despues de recibir eventos en `/api/sofia/event`.
+
+Quedan metodos de limpieza de estado conversacional para evitar residuos antiguos en MongoDB, pero no se monta un worker de follow-ups en `AppModule` ni en `MetaMessagingWebhookModule`.
 
 Webhook de Meta Messenger/Instagram:
 
@@ -143,57 +285,13 @@ GET  /webhooks/meta/messaging
 POST /webhooks/meta/messaging
 ```
 
-## Sofia Agent Engine
+## Sofia Brain
 
-Endpoints:
+Sofia Brain vive en VIVA.
 
-```text
-GET  /api/sofia/context/:leadId
-GET  /api/sofia/recommendation/:leadId
-POST /api/sofia/execute
-GET  /api/sofia/learning/:dealerId
-GET  /api/sofia/activity/:leadId
-```
+Este backend NestJS no monta endpoints internos `/api/sofia/context`, `/api/sofia/recommendation`, `/api/sofia/execute`, `/api/sofia/learning` ni `/api/sofia/activity` en la aplicacion principal.
 
-El `leadId` canonico usa `channel:pageId:contactId`, por ejemplo `messenger:meta-page-1:12345`. Tambien se puede consultar por `contactId`; cuando se usa el ID canonico en una URL debe enviarse URL-encoded.
-
-Todas las rutas requieren alcance de dealer y permiso del usuario:
-
-```text
-x-user-id: viva-user-id
-x-dealer-id: offlease-fredericksburg
-x-user-permissions: sofia:read,sofia:execute
-```
-
-Si se configura `SOFIA_INTERNAL_API_KEY`, un servicio interno puede usar `x-internal-api-key`, pero aun debe enviar `x-dealer-id`.
-
-Ejemplo de accion asistida:
-
-```json
-{
-  "leadId": "messenger:meta-page-1:12345",
-  "actionType": "request_documents",
-  "channel": "messenger",
-  "approvedByUser": true,
-  "payload": {
-    "message": "Para avanzar, ¿cuentas con identificacion vigente y comprobante bancario?"
-  }
-}
-```
-
-Las acciones de contacto requieren un `payload.message` editable. Por defecto no se ejecuta nada sin `approvedByUser=true`. Las llamadas Retell requieren ademas `AUTO_RETELL_CALLS_ENABLED=true`; la autonomia global solo se habilita con `SOFIA_AUTONOMOUS_ENABLED=true`.
-
-Sofia respeta opt-out/STOP, numero equivocado, horario comercial y limite de acciones por lead. Las acciones, recomendaciones y eventos se guardan en `sofia_actions`, `sofia_recommendations` y `activities`.
-
-Proveedores actuales:
-
-- Messenger/Instagram: API de Meta existente.
-- WhatsApp: cliente WhatsApp Web existente; si Chrome o la sesion no estan disponibles, queda deshabilitado sin detener el resto de la app.
-- SMS: Twilio cuando sus credenciales estan configuradas.
-- Llamadas: Retell cuando sus credenciales y el interruptor explicito estan configurados.
-- Tareas/estado: registro interno VIVA en Sofia Actions.
-
-Este repositorio no contiene el frontend VIVA. Los paneles Sofia Thinking, Recommended Action, Buyer DNA, Sofia Is Learning, Sofia Live Operations, Deploy Sofia y Work Mode deben consumir estos endpoints desde el repositorio frontend correspondiente, sin datos mock.
+NestJS solo alimenta a Sofia Brain con contexto enriquecido mediante eventos HTTP. La decision operativa, las llamadas, las citas, los documentos, las tareas, la reactivacion y la cola Sofia pertenecen a VIVA.
 
 ## Verificacion
 
@@ -212,3 +310,5 @@ Este proyecto lo desarrolla una sola persona. Cuando Codex suba cambios a GitHub
 ## Notas de resiliencia
 
 El adaptador `GhlPassiveCrmAdapter` encapsula sus fallos con `Logger`. Si el destino GHL falla, el caso de uso principal no se interrumpe y la respuesta al usuario final por Meta sigue siendo prioritaria.
+
+El adaptador `VivaSofiaEventAdapter` tambien es no bloqueante. Si VIVA no responde, el evento se registra en logs, pero la conversacion del lead continua.
