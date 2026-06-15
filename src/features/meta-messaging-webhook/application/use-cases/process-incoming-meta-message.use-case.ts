@@ -389,7 +389,7 @@ export class ProcessIncomingMetaMessageUseCase {
   private buildVivaCustomer(profile?: CustomerProfile): VivaCustomer {
     const firstName = profile?.firstName ?? null;
     const lastName = profile?.lastName ?? null;
-    const fullName = profile?.fullName ?? [firstName, lastName].filter(Boolean).join(' ').trim() || null;
+    const fullName = (profile?.fullName ?? [firstName, lastName].filter(Boolean).join(' ').trim()) || null;
 
     return {
       firstName,
