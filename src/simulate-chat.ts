@@ -23,7 +23,7 @@ async function bootstrap(): Promise<void> {
   const profile = dealerProfiles.resolve({ profileKey: args.profileKey });
   const rl = createInterface({ input, output });
 
-  output.write(`\nSimulador Meta Messaging\n`);
+  output.write(`\nSimulador Meta/WhatsApp Messaging\n`);
   output.write(`Dealer: ${profile.displayName}\n`);
   output.write(`Contacto: ${args.contactId}\n`);
   output.write(`Canal: ${args.channel}\n`);
@@ -85,7 +85,9 @@ function parseArgs(argv: string[]): CliArgs {
 }
 
 function parseChannel(value: string): MetaMessagingChannel {
-  return value === 'instagram' ? 'instagram' : 'messenger';
+  if (value === 'instagram') return 'instagram';
+  if (value === 'whatsapp') return 'whatsapp';
+  return 'messenger';
 }
 
 function readArg(argv: string[], name: string): string | undefined {
