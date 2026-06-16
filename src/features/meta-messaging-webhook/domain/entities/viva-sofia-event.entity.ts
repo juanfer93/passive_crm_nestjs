@@ -10,6 +10,7 @@ export interface VivaSofiaEventPayload {
   dealerId: number;
   leadId: string;
   ghlContactId: string | null;
+  metaUserId: string | null;
   customerName: string | null;
   phone: string | null;
   vehicle_category: string | null;
