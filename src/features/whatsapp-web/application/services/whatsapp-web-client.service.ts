@@ -7,19 +7,15 @@ import { ConversationMessage, ConversationMessageKind } from '@/features/meta-me
 import { CustomerProfile } from '@/features/meta-messaging-webhook/domain/entities/customer-profile.entity';
 import { LeadCustomFields } from '@/features/meta-messaging-webhook/domain/entities/lead-custom-fields.entity';
 import { MediaContent } from '@/features/meta-messaging-webhook/domain/entities/media-content.entity';
-import {
-  VivaCustomer,
-  VivaSofiaEventType,
-} from '@/features/meta-messaging-webhook/domain/entities/viva-sofia-event.entity';
+import { VivaSofiaEventType } from '@/features/meta-messaging-webhook/domain/entities/viva-sofia-event.entity';
 import { buildCompletedLeadCourtesyReply } from '@/features/meta-messaging-webhook/domain/services/completed-lead-courtesy-reply.service';
 import { shouldReactivateLeadQualification } from '@/features/meta-messaging-webhook/domain/services/lead-qualification-reactivation.service';
 import {
-  buildVivaBuyerDNA,
+  buildVivaBuyerSnapshot,
   buildVivaConversationSummary,
-  buildVivaIntent,
+  hasAppointmentJustCreated,
   hasBuyerDNAChanged,
   hasDocumentationJustReceived,
-  hasPurchaseIntentJustDetected,
   lastInboundMessage,
 } from '@/features/meta-messaging-webhook/domain/services/viva-sofia-event-factory.service';
 import {
@@ -311,6 +307,7 @@ export class WhatsappWebClientService implements OnModuleInit, OnModuleDestroy {
       leadQualification.customFields,
       [inboundMessage, outboundMessage],
       isNewLead,
+      this.receivedDocumentFile(kind),
     );
   }
 
@@ -431,8 +428,14 @@ export class WhatsappWebClientService implements OnModuleInit, OnModuleDestroy {
     currentLeadFields: LeadCustomFields,
     messages: ConversationMessage[],
     isNewLead: boolean,
+    receivedDocumentFile: boolean,
   ): void {
-    const eventTypes = this.resolveVivaEventTypes(previousLeadFields, currentLeadFields, isNewLead);
+    const eventTypes = this.resolveVivaEventTypes(
+      previousLeadFields,
+      currentLeadFields,
+      isNewLead,
+      receivedDocumentFile,
+    );
 
     if (eventTypes.length === 0) {
       return;
@@ -443,14 +446,23 @@ export class WhatsappWebClientService implements OnModuleInit, OnModuleDestroy {
       const leadFields = state?.leadCustomFields ?? currentLeadFields;
       const conversationMessages = state?.messages?.length ? state.messages : messages;
       const lastInbound = lastInboundMessage(conversationMessages);
+      const buyerSnapshot = buildVivaBuyerSnapshot(leadFields);
       const basePayload = {
+        dealerId: this.vivaDealerId(),
         leadId: this.leadId(contactId),
         ghlContactId: null,
-        customer: this.buildVivaCustomer(state?.customerProfile),
-        buyerDNA: buildVivaBuyerDNA(leadFields),
-        intent: buildVivaIntent(leadFields),
+        customerName: this.customerName(state?.customerProfile),
+        phone: leadFields.phone ?? state?.customerProfile?.phone ?? this.phoneFromJid(contactId),
+        vehicle_category: buyerSnapshot.vehicle_category,
+        vehicle_interest: buyerSnapshot.vehicle_interest,
+        down_payment: buyerSnapshot.down_payment,
+        purchase_timeline: buyerSnapshot.purchase_timeline,
+        document_status: buyerSnapshot.document_status,
+        bank_account_status: buyerSnapshot.bank_account_status,
+        preferred_language: buyerSnapshot.preferred_language,
+        conversation_summary: buildVivaConversationSummary(leadFields, conversationMessages),
+        appointment_date: buyerSnapshot.appointment_date,
         conversation: {
-          summary: buildVivaConversationSummary(leadFields, conversationMessages),
           lastMessage: lastInbound?.text ?? null,
           channel: 'whatsapp',
           pageId: this.whatsappPageId,
@@ -471,26 +483,31 @@ export class WhatsappWebClientService implements OnModuleInit, OnModuleDestroy {
     previousLeadFields: LeadCustomFields,
     currentLeadFields: LeadCustomFields,
     isNewLead: boolean,
+    receivedDocumentFile: boolean,
   ): VivaSofiaEventType[] {
     const eventTypes: VivaSofiaEventType[] = [];
 
     if (isNewLead) {
-      eventTypes.push('new_lead');
+      eventTypes.push('lead.created');
     }
 
     if (!isNewLead && hasBuyerDNAChanged(previousLeadFields, currentLeadFields)) {
-      eventTypes.push('buyer_dna_updated');
+      eventTypes.push('lead.updated', 'buyer_dna_updated');
     }
 
-    if (hasPurchaseIntentJustDetected(previousLeadFields, currentLeadFields)) {
-      eventTypes.push('purchase_intent_detected');
+    if (hasAppointmentJustCreated(previousLeadFields, currentLeadFields)) {
+      eventTypes.push('appointment.created');
     }
 
-    if (hasDocumentationJustReceived(previousLeadFields, currentLeadFields)) {
-      eventTypes.push('documentation_received');
+    if (receivedDocumentFile || hasDocumentationJustReceived(previousLeadFields, currentLeadFields)) {
+      eventTypes.push('document.received');
     }
 
     return [...new Set(eventTypes)];
+  }
+
+  private receivedDocumentFile(kind: ConversationMessageKind): boolean {
+    return kind === 'image' || kind === 'unknown';
   }
 
   private customerProfileFromContact(
@@ -512,16 +529,8 @@ export class WhatsappWebClientService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  private buildVivaCustomer(profile?: CustomerProfile): VivaCustomer {
-    const firstName = profile?.firstName ?? null;
-    const lastName = profile?.lastName ?? null;
-    const fullName = (profile?.fullName ?? [firstName, lastName].filter(Boolean).join(' ').trim()) || null;
-
-    return {
-      firstName,
-      lastName,
-      fullName,
-    };
+  private customerName(profile?: CustomerProfile): string | null {
+    return (profile?.fullName ?? [profile?.firstName, profile?.lastName].filter(Boolean).join(' ').trim()) || null;
   }
 
   private async safeGetContact(message: Message): Promise<WhatsappContactLike | null> {
@@ -566,6 +575,10 @@ export class WhatsappWebClientService implements OnModuleInit, OnModuleDestroy {
 
   private mask(value: string): string {
     return value.length <= 4 ? '****' : `${value.slice(0, 2)}***${value.slice(-4)}`;
+  }
+
+  private vivaDealerId(): number {
+    return 13;
   }
 
   private leadId(contactId: string): string {
