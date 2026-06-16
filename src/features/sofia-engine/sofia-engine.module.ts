@@ -2,6 +2,7 @@ import { HttpModule } from '@nestjs/axios';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { DealerProfileResolver } from '@/features/meta-messaging-webhook/application/services/dealer-profile-resolver.service';
+import { GhlMessagingService } from '@/features/meta-messaging-webhook/infrastructure/ghl/ghl-messaging.service';
 import { MetaMessagingAdapter } from '@/features/meta-messaging-webhook/infrastructure/meta/meta-messaging.adapter';
 import {
   Conversation,
@@ -42,6 +43,7 @@ import { SofiaAccessGuard } from '@/features/sofia-engine/presentation/guards/so
   controllers: [SofiaEngineController],
   providers: [
     DealerProfileResolver,
+    GhlMessagingService,
     MetaMessagingAdapter,
     SofiaAccessGuard,
     SofiaActionService,
