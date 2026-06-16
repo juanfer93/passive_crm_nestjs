@@ -1,9 +1,5 @@
 import { ConversationMessage } from '@/features/meta-messaging-webhook/domain/entities/conversation-message.entity';
 import { LeadCustomFields } from '@/features/meta-messaging-webhook/domain/entities/lead-custom-fields.entity';
-import {
-  VivaBuyerDNA,
-  VivaLeadIntent,
-} from '@/features/meta-messaging-webhook/domain/entities/viva-sofia-event.entity';
 
 const POSITIVE_DOCUMENT_VALUES = [
   'confirmed',
@@ -23,30 +19,27 @@ const POSITIVE_DOCUMENT_VALUES = [
   'licencia',
 ];
 
-export function buildVivaBuyerDNA(fields: LeadCustomFields): VivaBuyerDNA {
-  return {
-    vehicleType: normalizeVehicleType(fields.vehicle_type),
-    vehicleInterest: normalizeNullable(fields.vehicle_interest),
-    downPayment: parseDownPayment(fields.down_payment),
-    creditProfile: normalizeTimelineValue(fields.credit_profile),
-    timeline: normalizeTimelineValue(fields.purchase_timeline),
-    language: normalizeLanguage(fields.language),
-  };
+export interface VivaBuyerSnapshot {
+  vehicle_category: string | null;
+  vehicle_interest: string | null;
+  down_payment: number | null;
+  purchase_timeline: string | null;
+  document_status: string;
+  bank_account_status: string;
+  preferred_language: string | null;
+  appointment_date: string | null;
 }
 
-export function buildVivaIntent(fields: LeadCustomFields): VivaLeadIntent {
-  const purchaseIntent = calculatePurchaseIntent(fields);
-
+export function buildVivaBuyerSnapshot(fields: LeadCustomFields): VivaBuyerSnapshot {
   return {
-    purchaseIntent,
-    readyBuyer:
-      purchaseIntent >= 80 ||
-      Boolean(
-        fields.lead_temperature === 'hot' &&
-          fields.vehicle_interest &&
-          fields.down_payment &&
-          fields.phone,
-      ),
+    vehicle_category: normalizeVehicleType(fields.vehicle_type),
+    vehicle_interest: normalizeNullable(fields.vehicle_interest),
+    down_payment: parseDownPayment(fields.down_payment),
+    purchase_timeline: normalizeTimelineValue(fields.purchase_timeline),
+    document_status: normalizeTimelineValue(fields.document_status) ?? 'unknown',
+    bank_account_status: normalizeTimelineValue(fields.bank_account_status) ?? inferBankAccountStatus(fields),
+    preferred_language: normalizeLanguage(fields.language),
+    appointment_date: normalizeNullable(fields.appointment_date),
   };
 }
 
@@ -57,13 +50,14 @@ export function buildVivaConversationSummary(
   const lastInbound = lastInboundMessage(messages);
   const parts = [
     fields.vehicle_interest ?? fields.vehicle_type
-      ? `Customer wants ${fields.vehicle_interest ?? fields.vehicle_type}`
+      ? `Cliente busca ${fields.vehicle_interest ?? fields.vehicle_type}`
       : undefined,
-    fields.down_payment ? `has ${fields.down_payment} down` : undefined,
-    fields.credit_profile ? `credit profile: ${fields.credit_profile}` : undefined,
+    fields.down_payment ? `tiene ${fields.down_payment} de down` : undefined,
+    fields.credit_profile ? `credito: ${fields.credit_profile}` : undefined,
     fields.purchase_timeline ? `timeline: ${fields.purchase_timeline}` : undefined,
-    fields.document_status ? `documents: ${fields.document_status}` : undefined,
-    fields.language ? `language: ${fields.language}` : undefined,
+    fields.document_status ? `documentos: ${fields.document_status}` : undefined,
+    fields.bank_account_status ? `cuenta bancaria: ${fields.bank_account_status}` : undefined,
+    fields.language ? `idioma: ${fields.language}` : undefined,
   ].filter((part): part is string => Boolean(part));
 
   if (parts.length > 0) {
@@ -74,14 +68,7 @@ export function buildVivaConversationSummary(
 }
 
 export function hasBuyerDNAChanged(previous: LeadCustomFields, current: LeadCustomFields): boolean {
-  return JSON.stringify(buildVivaBuyerDNA(previous)) !== JSON.stringify(buildVivaBuyerDNA(current));
-}
-
-export function hasPurchaseIntentJustDetected(
-  previous: LeadCustomFields,
-  current: LeadCustomFields,
-): boolean {
-  return !buildVivaIntent(previous).readyBuyer && buildVivaIntent(current).readyBuyer;
+  return JSON.stringify(buildVivaBuyerSnapshot(previous)) !== JSON.stringify(buildVivaBuyerSnapshot(current));
 }
 
 export function hasDocumentationJustReceived(
@@ -91,6 +78,13 @@ export function hasDocumentationJustReceived(
   return !hasDocumentationSignal(previous.document_status) && hasDocumentationSignal(current.document_status);
 }
 
+export function hasAppointmentJustCreated(
+  previous: LeadCustomFields,
+  current: LeadCustomFields,
+): boolean {
+  return !normalizeNullable(previous.appointment_date) && Boolean(normalizeNullable(current.appointment_date));
+}
+
 export function lastInboundMessage(messages: ConversationMessage[]): ConversationMessage | undefined {
   return messages
     .slice()
@@ -98,43 +92,7 @@ export function lastInboundMessage(messages: ConversationMessage[]): Conversatio
     .find((message) => message.direction === 'inbound');
 }
 
-function calculatePurchaseIntent(fields: LeadCustomFields): number {
-  let score = 0;
-  const normalizedTimeline = normalizeForMatching(fields.purchase_timeline);
-
-  if (fields.lead_temperature === 'hot') score += 30;
-  if (fields.lead_temperature === 'warm') score += 15;
-  if (
-    normalizedTimeline.includes('today') ||
-    normalizedTimeline.includes('hoy') ||
-    normalizedTimeline.includes('this week') ||
-    normalizedTimeline.includes('esta semana') ||
-    normalizedTimeline.includes('asap') ||
-    normalizedTimeline.includes('lo antes')
-  ) {
-    score += 20;
-  }
-  if (fields.vehicle_interest) score += 15;
-  if (fields.vehicle_type) score += 10;
-  if (fields.down_payment) score += 20;
-  if (hasDocumentationSignal(fields.document_status)) score += 15;
-  if (fields.phone) score += 10;
-
-  return Math.min(score, 100);
-}
-
-function normalizeVehicleType(value?: string): string | null {
-  const normalized = normalizeForMatching(value);
-
-  if (!normalized) return null;
-  if (normalized.includes('truck') || normalized.includes('troca') || normalized.includes('pickup')) return 'truck';
-  if (normalized.includes('suv')) return 'suv';
-  if (normalized.includes('sedan') || normalized.includes('carro') || normalized.includes('auto')) return 'sedan';
-
-  return normalizeTimelineValue(value);
-}
-
-function parseDownPayment(value?: string): number | null {
+export function parseDownPayment(value?: string): number | null {
   if (!value) return null;
 
   const normalized = value.toLowerCase().replace(/,/g, '').trim();
@@ -147,6 +105,17 @@ function parseDownPayment(value?: string): number | null {
   if (Number.isNaN(parsed)) return null;
 
   return normalized.includes('k') ? Math.round(parsed * 1000) : Math.round(parsed);
+}
+
+function normalizeVehicleType(value?: string): string | null {
+  const normalized = normalizeForMatching(value);
+
+  if (!normalized) return null;
+  if (normalized.includes('truck') || normalized.includes('troca') || normalized.includes('pickup')) return 'truck';
+  if (normalized.includes('suv')) return 'SUV';
+  if (normalized.includes('sedan') || normalized.includes('carro') || normalized.includes('auto')) return 'sedan';
+
+  return normalizeTimelineValue(value);
 }
 
 function normalizeLanguage(value?: string): string | null {
@@ -165,6 +134,21 @@ function hasDocumentationSignal(value?: string): boolean {
   if (!normalized) return false;
 
   return POSITIVE_DOCUMENT_VALUES.some((positiveValue) => normalized.includes(positiveValue));
+}
+
+function inferBankAccountStatus(fields: LeadCustomFields): string {
+  const normalized = normalizeForMatching(fields.document_status);
+
+  if (
+    normalized.includes('bank') ||
+    normalized.includes('banco') ||
+    normalized.includes('account') ||
+    normalized.includes('cuenta')
+  ) {
+    return 'has_active_bank_account';
+  }
+
+  return 'unknown';
 }
 
 function normalizeNullable(value?: string): string | null {
