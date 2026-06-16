@@ -18,6 +18,8 @@ export function normalizeLeadCustomFields(content?: string | null): LeadCustomFi
       vehicle_type: vehicleType,
       down_payment: stringOrUndefined(parsed.down_payment),
       document_status: normalizeDocumentStatus(parsed.document_status),
+      bank_account_status: normalizeBankAccountStatus(parsed.bank_account_status),
+      appointment_date: stringOrUndefined(parsed.appointment_date),
       phone: normalizePhone(parsed.phone),
       email: normalizeEmail(parsed.email),
       language: normalizeLanguage(parsed.language),
@@ -198,7 +200,6 @@ function normalizeVehicleType(value: unknown, vehicleInterest?: string): string 
   if (
     [
       'sedan',
-      'sedan',
       'corolla',
       'camry',
       'civic',
@@ -258,6 +259,32 @@ function normalizeLanguage(value: unknown): string | undefined {
   }
 
   return undefined;
+}
+
+function normalizeBankAccountStatus(value: unknown): string | undefined {
+  const normalized = normalizeText(value);
+
+  if (!normalized) {
+    return undefined;
+  }
+
+  if (
+    ['has_active_bank_account', 'active bank', 'cuenta activa', 'bank account', 'cuenta bancaria'].some(
+      (phrase) => normalized.includes(phrase),
+    )
+  ) {
+    return 'has_active_bank_account';
+  }
+
+  if (['no_bank_account', 'sin cuenta', 'no bank'].some((phrase) => normalized.includes(phrase))) {
+    return 'no_bank_account';
+  }
+
+  if (normalized.includes('unknown')) {
+    return 'unknown';
+  }
+
+  return stringOrUndefined(value);
 }
 
 function normalizeText(value: unknown): string | undefined {
