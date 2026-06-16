@@ -344,8 +344,9 @@ export class ProcessIncomingMetaMessageUseCase {
         dealerId: this.vivaDealerId(),
         leadId: this.leadId(source),
         ghlContactId: null,
+        metaUserId: source.contactId,
         customerName: this.customerName(state?.customerProfile),
-        phone: leadFields.phone ?? state?.customerProfile?.phone ?? null,
+        phone: this.vivaPhone(leadFields.phone ?? state?.customerProfile?.phone ?? null),
         vehicle_category: buyerSnapshot.vehicle_category,
         vehicle_interest: buyerSnapshot.vehicle_interest,
         down_payment: buyerSnapshot.down_payment,
@@ -405,6 +406,24 @@ export class ProcessIncomingMetaMessageUseCase {
 
   private customerName(profile?: CustomerProfile): string | null {
     return (profile?.fullName ?? [profile?.firstName, profile?.lastName].filter(Boolean).join(' ').trim()) || null;
+  }
+
+  private vivaPhone(value?: string | null): string | null {
+    const digits = value?.replace(/\D/g, '') ?? '';
+
+    if (!digits) {
+      return null;
+    }
+
+    if (digits.length === 10) {
+      return `+1${digits}`;
+    }
+
+    if (digits.length === 11 && digits.startsWith('1')) {
+      return `+${digits}`;
+    }
+
+    return `+${digits}`;
   }
 
   private vivaDealerId(): number {
