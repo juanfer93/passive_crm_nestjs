@@ -1,8 +1,10 @@
 import { HttpModule } from '@nestjs/axios';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { GhlWhatsappReconciliationService } from '@/features/meta-messaging-webhook/application/services/ghl-whatsapp-reconciliation.service';
 import { AcceptMetaWebhookUseCase } from '@/features/meta-messaging-webhook/application/use-cases/accept-meta-webhook.use-case';
 import { EnsureMetaUserProfileUseCase } from '@/features/meta-messaging-webhook/application/use-cases/ensure-meta-user-profile.use-case';
+import { ProcessGhlWhatsappWakeupUseCase } from '@/features/meta-messaging-webhook/application/use-cases/process-ghl-whatsapp-wakeup.use-case';
 import { ProcessIncomingMetaMessageUseCase } from '@/features/meta-messaging-webhook/application/use-cases/process-incoming-meta-message.use-case';
 import { SimulateTerminalConversationUseCase } from '@/features/meta-messaging-webhook/application/use-cases/simulate-terminal-conversation.use-case';
 import { VerifyMetaWebhookUseCase } from '@/features/meta-messaging-webhook/application/use-cases/verify-meta-webhook.use-case';
@@ -20,6 +22,7 @@ import { META_MESSENGER } from '@/features/meta-messaging-webhook/domain/ports/m
 import { META_USER_PROFILE } from '@/features/meta-messaging-webhook/domain/ports/meta-user-profile.port';
 import { VIVA_SOFIA_EVENT_PUBLISHER } from '@/features/meta-messaging-webhook/domain/ports/viva-sofia-event-publisher.port';
 import { NodeBackgroundTaskRunner } from '@/features/meta-messaging-webhook/infrastructure/background/node-background-task-runner';
+import { GhlMessagingService } from '@/features/meta-messaging-webhook/infrastructure/ghl/ghl-messaging.service';
 import { GhlPassiveCrmAdapter } from '@/features/meta-messaging-webhook/infrastructure/ghl/ghl-passive-crm.adapter';
 import { CompositeCrmSinkAdapter } from '@/features/meta-messaging-webhook/infrastructure/hln/composite-crm-sink.adapter';
 import { HlnCrmSinkAdapter } from '@/features/meta-messaging-webhook/infrastructure/hln/hln-crm-sink.adapter';
@@ -33,6 +36,7 @@ import {
 } from '@/features/meta-messaging-webhook/infrastructure/mongo/schemas/message-receipt.schema';
 import { OpenAiAssistantAdapter } from '@/features/meta-messaging-webhook/infrastructure/openai/openai-assistant.adapter';
 import { VivaSofiaEventAdapter } from '@/features/meta-messaging-webhook/infrastructure/viva/viva-sofia-event.adapter';
+import { GhlWhatsappWebhookController } from '@/features/meta-messaging-webhook/presentation/controllers/ghl-whatsapp-webhook.controller';
 import { MetaMessagingWebhookController } from '@/features/meta-messaging-webhook/presentation/controllers/meta-messaging-webhook.controller';
 import { MetaSignatureGuard } from '@/features/meta-messaging-webhook/presentation/guards/meta-signature.guard';
 
@@ -47,18 +51,21 @@ import { MetaSignatureGuard } from '@/features/meta-messaging-webhook/presentati
       { name: MessageReceipt.name, schema: MessageReceiptSchema },
     ]),
   ],
-  controllers: [MetaMessagingWebhookController],
+  controllers: [MetaMessagingWebhookController, GhlWhatsappWebhookController],
   providers: [
     AcceptMetaWebhookUseCase,
     EnsureMetaUserProfileUseCase,
+    ProcessGhlWhatsappWakeupUseCase,
     ProcessIncomingMetaMessageUseCase,
     SimulateTerminalConversationUseCase,
     VerifyMetaWebhookUseCase,
+    GhlWhatsappReconciliationService,
     DealerProfileResolver,
     MetaWebhookMessageExtractor,
     MetaSignatureGuard,
     MetaMessagingAdapter,
     OpenAiAssistantAdapter,
+    GhlMessagingService,
     GhlPassiveCrmAdapter,
     HlnCrmSinkAdapter,
     CompositeCrmSinkAdapter,

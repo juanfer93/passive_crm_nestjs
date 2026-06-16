@@ -41,7 +41,8 @@ El cliente nunca debe salir de WhatsApp.
 
 NestJS debe encargarse de:
 
-- Recibir eventos/mensajes provenientes del transporte GHL cuando el workflow quede definido.
+- Recibir wake-ups y mensajes provenientes de GHL WhatsApp.
+- Reconstruir contexto desde MongoDB y, cuando sea posible, desde la API de conversaciones de GHL.
 - AI conversation logic.
 - Memory extraction.
 - Lead qualification.
@@ -62,7 +63,7 @@ NestJS no debe encargarse de:
 - Ejecutar documentos.
 - Ejecutar citas.
 - Tomar decisiones operativas.
-- Enviar cupones, recordatorios, links de inventario o mensajes operativos directamente al cliente.
+- Enviar WhatsApp por SMS fallback.
 
 ## Responsabilidad de GHL
 
@@ -71,13 +72,13 @@ GHL es el transporte actual de WhatsApp.
 Por ahora, todo mensaje hacia el cliente debe salir por una conversacion de GHL:
 
 - mensajes de Sofia,
-- imagen del bono de $500,
+- imagen o URL publica del bono de $500,
 - links de inventario,
 - recordatorios de cita,
 - mensajes post-llamada,
 - cualquier follow-up por WhatsApp.
 
-El workflow exacto de GHL todavia no esta definido. Cuando se defina, NestJS debe integrarse a ese flujo sin crear una capa paralela de WhatsApp.
+El workflow principal de GHL para inbound debe actuar como wake-up, no como cerebro conversacional.
 
 ## Responsabilidad de VIVA
 
@@ -97,6 +98,148 @@ Retell es la capa de voz.
 
 Retell no decide el flujo operativo completo. Sofia/VIVA decide cuando llamar, con que contexto y que hacer despues de la llamada.
 
+## GHL WhatsApp Bridge V1
+
+### Inbound
+
+Endpoint NestJS:
+
+```text
+POST /webhooks/ghl/whatsapp
+```
+
+Workflow recomendado en GHL:
+
+```text
+Customer Replied
+Channel = WhatsApp
+→ Webhook POST /webhooks/ghl/whatsapp
+```
+
+Payload wake-up minimo:
+
+```json
+{
+  "source": "ghl",
+  "event": "conversation.wakeup",
+  "channel": "whatsapp",
+  "locationId": "GHL_LOCATION_ID",
+  "contactId": "GHL_CONTACT_ID",
+  "conversationId": "GHL_CONVERSATION_ID",
+  "messageId": "GHL_MESSAGE_ID",
+  "phone": "+15715551234",
+  "timestamp": "2026-06-16T15:30:00Z"
+}
+```
+
+Payload opcional si el workflow puede incluir el texto:
+
+```json
+{
+  "message": {
+    "id": "GHL_MESSAGE_ID",
+    "type": "text",
+    "text": "Quiero una SUV, tengo 2500 de down",
+    "timestamp": "2026-06-16T15:30:00Z"
+  },
+  "customer": {
+    "firstName": "Carlos",
+    "lastName": "Rivera",
+    "fullName": "Carlos Rivera",
+    "phone": "+15715551234",
+    "email": "cliente@example.com"
+  }
+}
+```
+
+Comportamiento del wake-up:
+
+1. NestJS recibe el aviso de GHL.
+2. Busca/crea memoria por `locationId + contactId`.
+3. Intenta hacer pull de mensajes recientes desde GHL Conversation API si `conversationId` esta disponible.
+4. Deduplica por `messageId` en MongoDB.
+5. Guarda mensajes nuevos en MongoDB.
+6. Extrae custom fields con OpenAI.
+7. Publica evento a VIVA.
+
+`Customer Replied` no es fuente de verdad completa. Solo despierta a NestJS para que reconstruya contexto.
+
+### Eventos enviados a VIVA desde inbound GHL
+
+NestJS puede publicar:
+
+| Evento | Cuando se emite |
+| --- | --- |
+| `whatsapp.message_received` | Cada wake-up inbound de WhatsApp desde GHL |
+| `lead.updated` | Cambian datos relevantes del lead |
+| `buyer_dna_updated` | Cambian datos que alimentan Buyer DNA |
+| `appointment.created` | Aparece `appointment_date` por primera vez |
+| `document.received` | El lead envia archivo/imagen o cambia `document_status` a positivo |
+
+### Reconciliation job
+
+Para no depender de real-time perfecto de GHL, existe un job de reconciliacion opcional.
+
+Config:
+
+```text
+GHL_RECONCILIATION_ENABLED=true
+GHL_RECONCILIATION_INTERVAL_MS=180000
+GHL_RECONCILIATION_LIMIT=100
+```
+
+Comportamiento:
+
+```text
+cada 2-5 minutos
+→ buscar conversaciones activas de las ultimas 24h
+→ hacer pull de mensajes recientes
+→ deduplicar
+→ guardar faltantes en MongoDB
+→ actualizar VIVA
+```
+
+Si la API de GHL falla o no esta disponible, el job registra warning y no tumba NestJS.
+
+### Outbound
+
+`GhlMessagingService` expone:
+
+- `sendWhatsAppMessage`
+- `sendBonusCoupon`
+- `sendInventoryLink`
+- `sendAppointmentConfirmation`
+- `sendAppointmentReminder`
+
+Reglas:
+
+- Usa `contactId` y, si existe, `conversationId`.
+- Sale por GHL, no por WhatsApp Web.
+- No hay SMS fallback para WhatsApp.
+- El bono puede enviarse como media si `GHL_SEND_MEDIA_ATTACHMENTS=true`; si no, cae a URL publica dentro del mensaje.
+- Cuando Sofia legacy ejecuta una accion WhatsApp, usa GHL y registra actividad Sofia.
+
+## Metricas de latencia
+
+Los eventos enviados a VIVA incluyen:
+
+```json
+{
+  "metrics": {
+    "customer_message_timestamp": "2026-06-16T15:30:00Z",
+    "ghl_webhook_received_at": "2026-06-16T15:30:03Z",
+    "nestjs_processed_at": "2026-06-16T15:30:05Z",
+    "viva_event_sent_at": "2026-06-16T15:30:05Z"
+  }
+}
+```
+
+Esto permite medir:
+
+```text
+Customer WhatsApp → GHL → NestJS → VIVA
+```
+
 ## Flujo conversacional actual de NestJS
 
 1. NestJS recibe un mensaje desde el transporte configurado.
@@ -104,10 +247,9 @@ Retell no decide el flujo operativo completo. Sofia/VIVA decide cuando llamar, c
 3. Si hay audio, lo transcribe con OpenAI.
 4. Si hay imagen, la analiza con OpenAI Vision.
 5. Si hay video o archivo no analizable, lo marca como archivo sin texto util y continua la calificacion.
-6. El prompt del dealer responde y continua con la siguiente pregunta pendiente.
-7. OpenAI extrae custom fields desde el historial.
-8. MongoDB guarda mensajes, custom fields, perfil de cliente y estado de calificacion.
-9. NestJS publica eventos Sofia hacia VIVA.
+6. OpenAI extrae custom fields desde el historial.
+7. MongoDB guarda mensajes, custom fields, perfil de cliente y estado de calificacion.
+8. NestJS publica eventos Sofia hacia VIVA.
 
 ## Transporte WhatsApp
 
@@ -134,7 +276,7 @@ Si no hay URL explicita para Sofia, el adapter construye el destino con la base 
 
 ```json
 {
-  "event": "lead.updated",
+  "event": "whatsapp.message_received",
   "dealerId": 13,
   "leadId": "ghl:LOCATION_ID:CONTACT_ID",
   "ghlContactId": "CONTACT_ID",
@@ -154,7 +296,14 @@ Si no hay URL explicita para Sofia, el adapter construye el destino con la base 
     "lastMessage": "Tengo 2500 y quiero ir esta semana",
     "channel": "whatsapp",
     "pageId": "ghl-location-id",
-    "contactId": "ghl-contact-id"
+    "contactId": "ghl-contact-id",
+    "conversationId": "ghl-conversation-id"
+  },
+  "ghl": {
+    "locationId": "LOCATION_ID",
+    "contactId": "CONTACT_ID",
+    "conversationId": "CONVERSATION_ID",
+    "messageId": "MESSAGE_ID"
   }
 }
 ```
@@ -164,16 +313,6 @@ Si no hay URL explicita para Sofia, el adapter construye el destino con la base 
 ```text
 leadId → ghlContactId → metaUserId → phone
 ```
-
-## Eventos Sofia emitidos por NestJS
-
-| Evento | Cuando se emite |
-| --- | --- |
-| `lead.created` | Primera vez que el contacto entra al flujo |
-| `lead.updated` | Cambian datos relevantes del lead |
-| `buyer_dna_updated` | Cambian datos que alimentan Buyer DNA |
-| `appointment.created` | Aparece `appointment_date` por primera vez |
-| `document.received` | El lead envia archivo/imagen o cambia `document_status` a positivo |
 
 ## Custom fields extraidos por OpenAI
 
@@ -215,6 +354,21 @@ PostgreSQL pertenece a VIVA y debe conservar leads, activities, appointments, ta
 - `WhatsappWebModule` ya no esta montado en `AppModule`.
 - Dependencias de `whatsapp-web.js`, `puppeteer`, `qrcode` y `qrcode-terminal` fueron removidas del package.
 - NestJS ya no debe iniciar cliente WhatsApp Web ni pedir QR.
+
+## Variables relevantes
+
+```text
+GHL_ACCESS_TOKEN=
+GHL_LOCATION_ID=
+GHL_API_BASE_URL=https://services.leadconnectorhq.com
+GHL_API_VERSION=2021-07-28
+GHL_WEBHOOK_SECRET=
+GHL_SEND_MEDIA_ATTACHMENTS=false
+GHL_RECONCILIATION_ENABLED=false
+GHL_RECONCILIATION_INTERVAL_MS=180000
+GHL_RECONCILIATION_LIMIT=100
+VIVA_DEFAULT_DEALER_ID=13
+```
 
 ## Ejecutar
 

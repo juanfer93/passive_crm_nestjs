@@ -10,6 +10,7 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { GhlMessagingService } from '@/features/meta-messaging-webhook/infrastructure/ghl/ghl-messaging.service';
 import { MetaMessagingAdapter } from '@/features/meta-messaging-webhook/infrastructure/meta/meta-messaging.adapter';
 import { SofiaActivityService } from '@/features/sofia-engine/application/services/sofia-activity.service';
 import { SofiaContextService } from '@/features/sofia-engine/application/services/sofia-context.service';
@@ -48,6 +49,7 @@ export class SofiaActionService {
     private readonly prompts: SofiaPromptService,
     private readonly activity: SofiaActivityService,
     private readonly meta: MetaMessagingAdapter,
+    private readonly ghlMessaging: GhlMessagingService,
     @InjectModel(SofiaAction.name)
     private readonly actionModel: Model<SofiaActionDocument>,
   ) {}
@@ -165,14 +167,16 @@ export class SofiaActionService {
     }
 
     const message = this.payloadString(input.payload, 'message');
-    return this.sendMessage(input.channel, context, message);
+    return this.sendMessage(input, context, message);
   }
 
   private async sendMessage(
-    channel: SofiaChannel,
+    input: ExecuteSofiaActionInput,
     context: Awaited<ReturnType<SofiaContextService['buildSofiaContext']>>,
     message: string,
   ): Promise<ProviderResult> {
+    const channel = input.channel;
+
     if (channel === 'messenger' || channel === 'instagram') {
       await this.meta.sendTextMessage(
         channel,
@@ -184,10 +188,17 @@ export class SofiaActionService {
     }
 
     if (channel === 'whatsapp') {
-      void message;
-      throw new BadRequestException(
-        'GHL WhatsApp transport is not configured in NestJS yet. Use the VIVA/GHL workflow for WhatsApp sends.',
-      );
+      return this.ghlMessaging.sendWhatsAppMessage({
+        locationId: context.lead.pageId,
+        contactId: context.lead.contactId,
+        conversationId: this.optionalPayloadString(input.payload, 'conversationId'),
+        message,
+        mediaUrl: this.optionalPayloadString(input.payload, 'mediaUrl'),
+        metadata: {
+          leadId: context.lead.id,
+          actionType: input.actionType,
+        },
+      });
     }
 
     if (channel === 'sms') {
@@ -288,6 +299,11 @@ export class SofiaActionService {
       throw new BadRequestException(`payload.${key} is required and must be editable text.`);
     }
     return value.trim();
+  }
+
+  private optionalPayloadString(payload: Record<string, unknown> | undefined, key: string): string | undefined {
+    const value = payload?.[key];
+    return typeof value === 'string' && value.trim() ? value.trim() : undefined;
   }
 
   private requirePhone(phone?: string): string {
