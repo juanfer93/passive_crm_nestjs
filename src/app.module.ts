@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { MetaMessagingWebhookModule } from '@/features/meta-messaging-webhook/meta-messaging-webhook.module';
-import { WhatsappWebModule } from '@/features/whatsapp-web/whatsapp-web.module';
 
 @Module({
   imports: [
@@ -17,7 +16,6 @@ import { WhatsappWebModule } from '@/features/whatsapp-web/whatsapp-web.module';
       }),
     }),
     MetaMessagingWebhookModule,
-    WhatsappWebModule,
   ],
 })
 export class AppModule {}
