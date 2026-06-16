@@ -1,7 +1,6 @@
 import { HttpModule } from '@nestjs/axios';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { WhatsappWebModule } from '@/features/whatsapp-web/whatsapp-web.module';
 import { DealerProfileResolver } from '@/features/meta-messaging-webhook/application/services/dealer-profile-resolver.service';
 import { MetaMessagingAdapter } from '@/features/meta-messaging-webhook/infrastructure/meta/meta-messaging.adapter';
 import {
@@ -33,7 +32,6 @@ import { SofiaAccessGuard } from '@/features/sofia-engine/presentation/guards/so
 @Module({
   imports: [
     HttpModule.register({ timeout: 8000, maxRedirects: 3 }),
-    WhatsappWebModule,
     MongooseModule.forFeature([
       { name: Conversation.name, schema: ConversationSchema },
       { name: SofiaAction.name, schema: SofiaActionSchema },

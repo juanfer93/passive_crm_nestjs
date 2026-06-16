@@ -10,7 +10,6 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { WhatsappWebClientService } from '@/features/whatsapp-web/application/services/whatsapp-web-client.service';
 import { MetaMessagingAdapter } from '@/features/meta-messaging-webhook/infrastructure/meta/meta-messaging.adapter';
 import { SofiaActivityService } from '@/features/sofia-engine/application/services/sofia-activity.service';
 import { SofiaContextService } from '@/features/sofia-engine/application/services/sofia-context.service';
@@ -48,7 +47,6 @@ export class SofiaActionService {
     private readonly contexts: SofiaContextService,
     private readonly prompts: SofiaPromptService,
     private readonly activity: SofiaActivityService,
-    private readonly whatsapp: WhatsappWebClientService,
     private readonly meta: MetaMessagingAdapter,
     @InjectModel(SofiaAction.name)
     private readonly actionModel: Model<SofiaActionDocument>,
@@ -186,13 +184,10 @@ export class SofiaActionService {
     }
 
     if (channel === 'whatsapp') {
-      const phone = this.requirePhone(context.lead.phone);
-      const status = this.whatsapp.getStatus();
-      if (!status.enabled || !status.ready) {
-        throw new BadRequestException('WhatsApp Web is not enabled and ready.');
-      }
-      await this.whatsapp.sendMessage(`${phone}@c.us`, message);
-      return { provider: 'whatsapp_web', providerMessageId: `whatsapp:${randomUUID()}` };
+      void message;
+      throw new BadRequestException(
+        'GHL WhatsApp transport is not configured in NestJS yet. Use the VIVA/GHL workflow for WhatsApp sends.',
+      );
     }
 
     if (channel === 'sms') {
