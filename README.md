@@ -2,41 +2,44 @@
 
 Backend NestJS para Meta Messenger, Instagram Messaging y WhatsApp Web.
 
-NestJS es el cerebro conversacional: conversa con el lead, entiende el contexto, extrae memoria, genera Buyer DNA, detecta intencion y guarda historial en MongoDB. VIVA OS es el sistema operativo: decide y ejecuta llamadas, follow-ups, documentos, citas, tareas y reactivaciones.
+NestJS es el cerebro conversacional: conversa con el lead, entiende el contexto, extrae memoria, califica, detecta intencion y envia datos a VIVA. VIVA OS decide y ejecuta llamadas, follow-ups, documentos, citas, tareas y reactivaciones.
 
-## Arquitectura VIVA
+## Regla clave
+
+NestJS conversa y extrae datos. VIVA decide, agenda, llama, envia mensajes y guarda actividad.
+
+## Arquitectura
 
 ```text
 Lead
   ↓
-Meta / WhatsApp
+Meta Messenger / Instagram / WhatsApp
   ↓
 NestJS Agent
   ↓
-Mongo Memory + Buyer DNA + Intent + Lead Summary
+Mongo Memory + Buyer DNA inputs + Intent + Lead Summary
   ↓
-Canal A: VIVA lead sync
-Canal B: VIVA Sofia event
+POST /api/sofia/event
   ↓
 VIVA OS / Sofia Brain
   ↓
-Voice Agent / WhatsApp Agent / Appointment Agent / Document Agent / Reactivation Agent
+Sofia Tasks / Task Executor / Voice / WhatsApp / Appointment / Document / Reactivation
 ```
 
 ## Responsabilidad de NestJS
 
 NestJS debe encargarse de:
 
-- WhatsApp conversations.
+- Conversaciones Messenger, Instagram y WhatsApp.
 - AI conversation logic.
 - Memory extraction.
 - Lead qualification.
-- Buyer DNA generation.
+- Buyer DNA input generation.
 - Intent detection.
 - Conversation summaries.
 - GHL synchronization.
 - MongoDB conversation history.
-- Publicar contexto enriquecido hacia VIVA por dos canales independientes.
+- Publicar eventos hacia VIVA Sofia.
 
 NestJS no debe encargarse de:
 
@@ -46,118 +49,60 @@ NestJS no debe encargarse de:
 - Ejecutar citas.
 - Tomar decisiones operativas.
 
+## VIVA backend esperado
+
+VIVA recibe los eventos de NestJS y alimenta:
+
+1. Sofia Brain: recibe eventos y decide que agente debe actuar.
+2. Sofia Tasks: crea tareas para `voice`, `whatsapp`, `appointment`, `document` y `reactivation`.
+3. Sofia Task Executor: ejecuta tareas via Retell/Twilio o las deja en `manual_review`.
+4. Buyer DNA Engine: clasifica leads como `ready_buyer`, `family_suv_buyer`, `work_truck_buyer`, `credit_concern`, `down_payment_problem`, `first_time_buyer`, `researching` o `no_show_risk`.
+5. Voice Playbook: define como habla Sofia para Off Lease Fredericksburg.
+6. Appointment Bonus Flow: cuando Sofia agenda, confirma cita, envia direccion, telefono, bono de $500, imagen del bono y guarda actividad.
+
 ## Flujo conversacional
 
 1. Meta llama `POST /webhooks/meta/messaging` desde Messenger o Instagram.
-2. El controller devuelve `200 OK` inmediatamente.
-3. `AcceptMetaWebhookUseCase` agenda el procesamiento en background.
-4. `ProcessIncomingMetaMessageUseCase` extrae mensajes y valida idempotencia por `messageId` en MongoDB.
-5. Si el mensaje ya existe, el caso de uso detiene el procesamiento.
-6. Si hay audio o imagen, el backend descarga el binario y lo procesa con OpenAI.
-7. El asistente genera la respuesta y se envia por la API de Meta.
-8. El estado conversacional se persiste en MongoDB usando `channel + pageId + senderId` como identidad del chat.
-9. OpenAI consulta el historial reciente guardado en MongoDB y extrae custom fields de lead.
-10. La escritura hacia GHL ocurre de forma secundaria y no bloqueante.
-11. Canal A sincroniza el lead completo hacia VIVA.
-12. Canal B publica eventos enriquecidos hacia Sofia Brain.
+2. WhatsApp Web recibe mensajes si esta habilitado y autenticado.
+3. NestJS valida idempotencia por `messageId` en MongoDB.
+4. Si hay audio, lo transcribe con OpenAI.
+5. Si hay imagen, la analiza con OpenAI Vision.
+6. Si hay video o archivo no analizable, lo marca como archivo sin texto util y continua la calificacion.
+7. El prompt del dealer responde y continua con la siguiente pregunta pendiente.
+8. OpenAI extrae custom fields desde el historial.
+9. MongoDB guarda mensajes, custom fields, perfil de cliente y estado de calificacion.
+10. NestJS sincroniza con GHL/VIVA lead sync cuando aplica.
+11. NestJS publica eventos Sofia hacia VIVA.
 
-## Integracion VIVA: dos canales activos
-
-| Canal | Endpoint VIVA | Adapter NestJS | Responsabilidad en VIVA |
-| --- | --- | --- | --- |
-| Canal A — Sincronizacion completa | `POST /api/ai-agent/webhook` | `HlnCrmSinkAdapter` via `CompositeCrmSinkAdapter` | Crear/actualizar lead, recalcular score y permitir Retell auto-call si aplica |
-| Canal B — Eventos Sofia | `POST /api/sofia/nest-event` | `VivaSofiaEventAdapter` | Notificar a Sofia Brain para generar decisiones y tareas automaticas |
-
-Ambos canales corren en background. Si uno falla, no bloquea la respuesta del bot al lead.
-
-## Canal A — Payload de sincronizacion completa
-
-`HlnCrmSinkAdapter` genera el payload para VIVA lead sync desde `syncToPassiveCrm()` cuando el lead ya tiene telefono y custom fields suficientes.
-
-```json
-{
-  "source": "nestjs_ai_agent",
-  "dealerId": 1,
-  "ghlContactId": null,
-  "metaUserId": "67890",
-  "conversationId": "messenger:12345:67890",
-  "customer": {
-    "firstName": "Juan",
-    "lastName": "Garcia",
-    "fullName": "Juan Garcia",
-    "phone": "5551234567",
-    "email": null,
-    "language": "es"
-  },
-  "qualification": {
-    "vehicle_interest": "Toyota Tundra",
-    "vehicle_type": "truck",
-    "down_payment": "3000",
-    "document_status": "itin",
-    "purchase_timeline": "this_week",
-    "credit_profile": "fair",
-    "contact_preference": "messenger",
-    "lead_temperature": "hot"
-  },
-  "conversation": {
-    "summary": "Cliente busca Toyota Tundra, tiene 3000 de enganche, documentos: itin",
-    "last_message": "Si, tengo 3000 de enganche",
-    "intent": "purchase",
-    "buying_intent_score": 75
-  },
-  "timestamps": {
-    "qualified_at": "2026-06-15T19:00:00.000Z",
-    "last_message_at": "2026-06-15T18:58:00.000Z"
-  }
-}
-```
-
-VIVA debe buscar/crear el lead usando `metaUserId`, `phone` o `email`. El nombre del perfil Meta se envia si esta disponible, pero no bloquea la sincronizacion.
-
-## Canal B — Eventos Sofia
-
-Eventos soportados:
-
-- `new_lead`
-- `buyer_dna_updated`
-- `purchase_intent_detected`
-- `documentation_received`
-- `appointment_created` reservado hasta conectar citas.
-- `call_completed` reservado para uso futuro.
-
-Endpoint esperado:
+## Endpoint Sofia
 
 ```text
-POST /api/sofia/nest-event
+POST /api/sofia/event
 ```
 
-Si no hay URL explicita para Sofia, el adapter construye el destino con la base URL de VIVA y `/api/sofia/nest-event`. Si no hay URL disponible, registra log y no bloquea la conversacion.
+Si no hay URL explicita para Sofia, el adapter construye el destino con la base URL de VIVA y `/api/sofia/event`. Si no hay URL disponible, registra log y no bloquea la conversacion.
+
+## Payload enviado a Sofia
 
 ```json
 {
-  "event": "purchase_intent_detected",
+  "event": "lead.created",
+  "dealerId": 13,
   "leadId": "messenger:12345:67890",
   "ghlContactId": null,
-  "customer": {
-    "firstName": "Juan",
-    "lastName": "Garcia",
-    "fullName": "Juan Garcia"
-  },
-  "buyerDNA": {
-    "vehicleType": "truck",
-    "vehicleInterest": "Toyota Tundra",
-    "downPayment": 3000,
-    "creditProfile": "fair",
-    "timeline": "this_week",
-    "language": "es"
-  },
-  "intent": {
-    "purchaseIntent": 75,
-    "readyBuyer": false
-  },
+  "customerName": "Carlos Rivera",
+  "phone": "7035551234",
+  "vehicle_category": "SUV",
+  "vehicle_interest": "Honda CR-V",
+  "down_payment": 2500,
+  "purchase_timeline": "this_week",
+  "document_status": "unknown",
+  "bank_account_status": "has_active_bank_account",
+  "preferred_language": "es",
+  "conversation_summary": "Cliente busca SUV, tiene 2500 de down y quiere venir esta semana.",
+  "appointment_date": null,
   "conversation": {
-    "summary": "Customer wants Toyota Tundra, has 3000 down, credit profile: fair, timeline: this_week, documents: itin, language: es",
-    "lastMessage": "Si, tengo 3000 de enganche",
+    "lastMessage": "Tengo 2500 y quiero ir esta semana",
     "channel": "messenger",
     "pageId": "12345",
     "contactId": "67890"
@@ -165,18 +110,51 @@ Si no hay URL explicita para Sofia, el adapter construye el destino con la base 
 }
 ```
 
-`leadId` canonico usa `channel:pageId:contactId`. El bloque `customer` viene del perfil de Meta guardado en MongoDB; si Meta no devuelve nombre, se envia `null` en `firstName`, `lastName` y `fullName`.
+`leadId` canonico usa `channel:pageId:contactId`.
 
-## Mapeo de eventos Sofia
+## Eventos Sofia emitidos por NestJS
 
-| Evento NestJS | Cuándo se emite | Evento esperado en VIVA |
-| --- | --- | --- |
-| `new_lead` | Primera vez que el contacto escribe | `lead.created` |
-| `buyer_dna_updated` | Cambia Buyer DNA | `lead.updated` |
-| `purchase_intent_detected` | El intent cruza el umbral ready buyer | `lead.scored` |
-| `documentation_received` | `document_status` pasa a valor positivo: `confirmed`, `received`, `itin`, `ssn`, `passport`, `id`, etc. | `document.received` |
-| `appointment_created` | Reservado hasta agregar `appointment_date` al extractor | `appointment.created` |
-| `call_completed` | Reservado para uso futuro | `ai_call.completed` |
+| Evento | Cuándo se emite |
+| --- | --- |
+| `lead.created` | Primera vez que el contacto escribe |
+| `lead.updated` | Cambian datos relevantes del lead |
+| `buyer_dna_updated` | Cambian datos que alimentan Buyer DNA |
+| `appointment.created` | Aparece `appointment_date` por primera vez |
+| `document.received` | El lead envia archivo/imagen o cambia `document_status` a positivo |
+
+## Custom fields extraidos por OpenAI
+
+```json
+{
+  "vehicle_interest": "Honda CR-V",
+  "vehicle_type": "SUV",
+  "down_payment": "2500",
+  "document_status": "unknown | confirmed | not_confirmed | itin | ssn | passport | id",
+  "bank_account_status": "unknown | has_active_bank_account | no_bank_account",
+  "appointment_date": "2026-06-20T15:00:00-04:00",
+  "purchase_timeline": "this_week",
+  "credit_profile": "fair",
+  "phone": "7035551234",
+  "email": "cliente@example.com",
+  "language": "es",
+  "lead_temperature": "hot"
+}
+```
+
+`appointment_date` solo se llena cuando el cliente confirma una fecha/hora de visita o cita. Si no existe, va como `null` o no se guarda.
+
+## WhatsApp
+
+WhatsApp Web ya usa el mismo cerebro conversacional que Messenger:
+
+- mismo prompt del dealer,
+- misma memoria MongoDB,
+- misma extraccion de campos,
+- mismo analisis de audio e imagen,
+- mismos eventos Sofia,
+- mismo sync a GHL/VIVA.
+
+La autenticacion por QR/session de `whatsapp-web.js` es solo la capa de transporte y se puede reemplazar despues sin cambiar el cerebro conversacional.
 
 ## MongoDB como fuente de verdad conversacional
 
@@ -185,60 +163,12 @@ MongoDB conserva:
 - Conversation history.
 - Messages.
 - AI memory.
-- Buyer DNA / lead custom fields.
+- Lead custom fields / Buyer DNA inputs.
 - Intent.
-- Customer profile de Meta.
+- Customer profile de Meta o WhatsApp.
 - Summaries derivados del historial.
 
 PostgreSQL pertenece a VIVA y debe conservar leads, activities, appointments, tasks, Sofia decisions, Sofia queue y revenue intelligence.
-
-## Custom fields extraidos por OpenAI
-
-```json
-{
-  "vehicle_interest": "Toyota Tacoma 2022",
-  "purchase_timeline": "esta semana | este mes | solo estoy mirando | el otro mes",
-  "lead_temperature": "hot | warm | cold",
-  "vehicle_type": "Sedan | SUV | Troca",
-  "down_payment": "string",
-  "document_status": "confirmed | itin | ssn | passport | id",
-  "phone": "3055555555",
-  "email": "cliente@example.com",
-  "language": "es | en",
-  "credit_profile": "string"
-}
-```
-
-## Estructura
-
-```text
-src/
-  app.module.ts
-  main.ts
-  features/
-    meta-messaging-webhook/
-      domain/
-        entities/
-        ports/
-        services/
-        types/
-      application/
-        services/
-        use-cases/
-      infrastructure/
-        background/
-        ghl/
-        hln/
-        meta/
-        mongo/
-        openai/
-        viva/
-      presentation/
-        controllers/
-        guards/
-      meta-messaging-webhook.module.ts
-    whatsapp-web/
-```
 
 ## Ejecutar
 
@@ -247,64 +177,21 @@ pnpm install
 pnpm start:dev
 ```
 
-## Simular chat en terminal
+## Simular chat
 
 ```bash
 pnpm simulate:chat -- --profile offlease-fredericksburg --contact test-lead-1
-pnpm simulate:chat -- --profile offlease-fredericksburg --contact test-lead-1 --page meta-page-1
-pnpm simulate:chat -- --profile offlease-fredericksburg --contact test-lead-1 --page meta-page-2
+pnpm simulate:chat -- --profile offlease-fredericksburg --contact test-lead-1 --channel whatsapp --page whatsapp:default-client
 ```
-
-Perfiles disponibles:
-
-- `offlease-fredericksburg`
-- `offlease-motors-fredericksburg`
-- `offlease-stafford`
-
-## Simular media local
-
-```bash
-pnpm simulate:media -- --profile offlease-fredericksburg --contact media-image-1 --file C:\dev\imagen_de_prueba.jpg
-pnpm simulate:media -- --profile offlease-fredericksburg --contact media-audio-1 --file C:\dev\audio_de_prueba.ogg
-pnpm simulate:media -- --profile offlease-fredericksburg --contact media-audio-transcribe-only --file C:\dev\audio_de_prueba.ogg --transcribe-only
-```
-
-## Follow-ups automaticos
-
-NestJS ya no ejecuta follow-ups automaticos. La conversacion activa sigue respondiendo al lead, pero tareas, reactivaciones y seguimientos operativos deben ser creados y ejecutados por VIVA despues de recibir eventos en `/api/sofia/nest-event`.
-
-## Sofia Brain
-
-Sofia Brain vive en VIVA. NestJS no monta endpoints internos `/api/sofia/context`, `/api/sofia/recommendation`, `/api/sofia/execute`, `/api/sofia/learning` ni `/api/sofia/activity` en la aplicacion principal.
-
-## Pendiente del flujo VIVA/NestJS
-
-1. Confirmar que VIVA acepte Canal A con el payload actual de `HlnCrmSinkAdapter`.
-2. Confirmar que VIVA acepte Canal B con `event`, `leadId`, `ghlContactId`, `customer`, `buyerDNA`, `intent` y `conversation`.
-3. Definir si VIVA necesita un `ghlContactId` real. Actualmente NestJS envia `ghlContactId: null`.
-4. Conectar `appointment_created` cuando exista en NestJS un flujo real de citas o se agregue `appointment_date` al extractor.
-5. Conectar `call_completed` cuando exista un hook real de llamadas completadas.
-6. Decidir si `documentation_received` debe dispararse tambien por media/documentos adjuntos, no solo por `document_status`.
-7. Validar y calibrar el scoring de `purchaseIntent` con data real.
-8. Revisar si se eliminan definitivamente archivos legacy de `src/features/sofia-engine/`.
-9. Revisar si se eliminan definitivamente `ProcessDueFollowUpsUseCase` y `NodeFollowUpWorker`.
-10. Agregar tests unitarios para el factory y adapter de VIVA.
-11. Agregar test de integracion para `ProcessIncomingMetaMessageUseCase -> VivaSofiaEventPublisherPort`.
 
 ## Verificacion
 
 ```bash
-pnpm test
-pnpm lint
 pnpm build
+pnpm lint
+pnpm test
 ```
 
 ## Flujo Git/GitHub
 
-Este proyecto lo desarrolla una sola persona. Cuando Codex suba cambios a GitHub, debe trabajar directamente sobre `main` y hacer push a `main`. No crear ramas nuevas salvo que se pida explicitamente.
-
-Los commits deben usar convencion semantica: `feat:`, `fix:`, `chore:`, `docs:`, `refactor:` o `test:`.
-
-## Resiliencia
-
-`GhlPassiveCrmAdapter`, `HlnCrmSinkAdapter` y `VivaSofiaEventAdapter` encapsulan fallos con `Logger`. Si GHL o VIVA fallan, el caso de uso principal no se interrumpe y la respuesta al lead por Meta sigue siendo prioritaria.
+Este proyecto trabaja directo sobre `main` salvo instruccion contraria. Los commits deben usar convencion semantica: `feat:`, `fix:`, `chore:`, `docs:`, `refactor:` o `test:`.
