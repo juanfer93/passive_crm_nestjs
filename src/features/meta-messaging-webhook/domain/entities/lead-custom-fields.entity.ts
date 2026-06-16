@@ -8,6 +8,8 @@ export interface LeadCustomFields {
   vehicle_type?: string;
   down_payment?: string;
   document_status?: string;
+  bank_account_status?: string;
+  appointment_date?: string;
   phone?: string;
   email?: string;
   language?: string;
