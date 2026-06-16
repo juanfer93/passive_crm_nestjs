@@ -18,7 +18,6 @@ import { SofiaPromptService } from '@/features/sofia-engine/application/services
 import {
   ExecuteSofiaActionInput,
   SofiaActionType,
-  SofiaChannel,
 } from '@/features/sofia-engine/domain/sofia.types';
 import {
   SofiaAction,
