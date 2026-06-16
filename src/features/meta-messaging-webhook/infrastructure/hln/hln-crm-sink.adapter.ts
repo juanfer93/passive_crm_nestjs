@@ -75,6 +75,8 @@ export class HlnCrmSinkAdapter implements CrmSinkPort {
         vehicle_type: fields.vehicle_type ?? null,
         down_payment: fields.down_payment ?? null,
         document_status: fields.document_status ?? null,
+        bank_account_status: fields.bank_account_status ?? null,
+        appointment_date: fields.appointment_date ?? null,
         purchase_timeline: fields.purchase_timeline ?? null,
         credit_profile: fields.credit_profile ?? null,
         contact_preference: context?.channel ?? 'messenger',
@@ -173,6 +175,8 @@ export class HlnCrmSinkAdapter implements CrmSinkPort {
       fields.purchase_timeline ? `quiere comprar ${fields.purchase_timeline}` : undefined,
       fields.down_payment ? `tiene ${fields.down_payment} de enganche` : undefined,
       fields.document_status ? `documentos: ${fields.document_status}` : undefined,
+      fields.bank_account_status ? `cuenta bancaria: ${fields.bank_account_status}` : undefined,
+      fields.appointment_date ? `cita: ${fields.appointment_date}` : undefined,
     ]
       .filter(Boolean)
       .join(', ');
