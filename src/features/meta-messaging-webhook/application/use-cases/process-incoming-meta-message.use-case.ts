@@ -404,7 +404,7 @@ export class ProcessIncomingMetaMessageUseCase {
   }
 
   private customerName(profile?: CustomerProfile): string | null {
-    return profile?.fullName ?? [profile?.firstName, profile?.lastName].filter(Boolean).join(' ').trim() || null;
+    return (profile?.fullName ?? [profile?.firstName, profile?.lastName].filter(Boolean).join(' ').trim()) || null;
   }
 
   private vivaDealerId(): number {
